@@ -1,0 +1,13 @@
+# 本地工具缓存（不属于游戏本体）
+.mimosa/
+.v2c/
+.video_agent/
+
+# 系统杂项
+.DS_Store
+Thumbs.db
+*.log
+
+# 本地开发测试工具（动态执行游戏脚本，不随仓库分发）
+.pokemon-smoke-test.js
+.pokemon-render-test.js
