@@ -1,0 +1,3425 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>宝可梦农场 · 百变怪的农庄</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌱</text></svg>">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    background:radial-gradient(1100px 700px at 50% 25%, #2c4a3a, #101c14 75%);
+    display:flex;align-items:center;justify-content:center;
+    font-family:"PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,sans-serif;
+    color:#f5ecd7; overflow:hidden; user-select:none; -webkit-user-select:none;
+  }
+  #wrap{
+    position:relative; width:min(97vw,960px); aspect-ratio:3/2;
+    border-radius:12px; overflow:hidden; box-shadow:0 24px 70px rgba(0,0,0,.65);
+    border:3px solid #2b3a20; background:#7ec8f0;
+  }
+  canvas{width:100%;height:100%;display:block;cursor:crosshair}
+  /* ---------- 天气/色调 ---------- */
+  #fx{position:absolute;inset:0;pointer-events:none;z-index:4}
+  #rain{position:absolute;inset:0;pointer-events:none;z-index:4;display:none;opacity:.55;
+    background-image:repeating-linear-gradient(115deg, transparent 0 5px, rgba(180,200,240,.75) 5px 6px, transparent 6px 12px);
+    animation:rainMove .35s linear infinite}
+  @keyframes rainMove{to{background-position:-130px 0}}
+  #snow{position:absolute;inset:0;pointer-events:none;z-index:4;display:none;opacity:.9;
+    background-image:radial-gradient(circle at 20% 30%, #fff 0 2px, transparent 3px),
+      radial-gradient(circle at 70% 60%, #fff 0 2px, transparent 3px),
+      radial-gradient(circle at 40% 80%, #fff 0 2px, transparent 3px),
+      radial-gradient(circle at 85% 15%, #fff 0 2px, transparent 3px);
+    background-size:240px 240px; animation:snowDrift 4s linear infinite}
+  @keyframes snowDrift{to{background-position:60px 120px}}
+  /* ---------- HUD ---------- */
+  #hud{position:absolute;inset:0;pointer-events:none;z-index:5}
+  #topbar{position:absolute;top:8px;left:8px;right:8px;display:flex;gap:10px;flex-wrap:wrap;
+    background:rgba(20,28,12,.62);border:2px solid rgba(255,215,94,.35);border-radius:10px;
+    padding:6px 12px;font-size:15px;font-weight:600;letter-spacing:.5px;box-shadow:0 3px 10px rgba(0,0,0,.35)}
+  #topbar .sp{flex:1}
+  #hud-gold{color:#ffd75e}
+  #hud-save{opacity:0;transition:opacity .5s;font-size:13px}
+  #energybar{position:absolute;left:8px;top:62px;width:210px;height:26px;border-radius:13px;
+    background:rgba(20,14,6,.72);border:2px solid rgba(255,215,94,.4);overflow:hidden;box-shadow:0 3px 10px rgba(0,0,0,.35)}
+  #energyfill{height:100%;width:100%;background:linear-gradient(180deg,#ffe08a,#ffb52e);transition:width .25s}
+  #energytxt{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#4a2e08;text-shadow:0 1px 0 rgba(255,255,255,.35)}
+  #formbar{position:absolute;left:8px;top:94px;background:rgba(20,28,12,.72);border:2px solid rgba(255,215,94,.4);
+    border-radius:10px;padding:4px 12px;font-size:13px;font-weight:600;box-shadow:0 3px 10px rgba(0,0,0,.35)}
+  #hotbar{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);display:flex;gap:6px;
+    background:rgba(20,28,12,.72);border:2px solid rgba(255,215,94,.4);padding:6px;border-radius:12px;
+    box-shadow:0 4px 14px rgba(0,0,0,.4);pointer-events:auto}
+  .slot{width:52px;height:52px;border-radius:8px;border:2px solid #4a3a1e;background:#6a522b;display:flex;
+    flex-direction:column;align-items:center;justify-content:center;gap:1px;font-size:22px;color:#fff;cursor:pointer;
+    position:relative;transition:transform .08s}
+  .slot .nm{position:absolute;bottom:1px;font-size:10px;font-weight:700;color:#ffe9b0;text-shadow:0 1px 2px #000}
+  .slot .kb{position:absolute;left:3px;top:2px;font-size:9px;font-weight:700;color:rgba(255,255,255,.65)}
+  .slot .cnt{position:absolute;right:3px;top:1px;font-size:12px;font-weight:700;color:#fff;text-shadow:0 1px 2px #000}
+  .slot.sel{border-color:#ffd75e;transform:translateY(-4px);box-shadow:0 4px 0 #b8860b}
+  .slot:hover{filter:brightness(1.15)}
+  #hotbar.compact .slot{width:44px;height:44px;font-size:18px}
+  #hotbar.compact .slot .nm{font-size:9px}
+  #hint{position:absolute;left:8px;bottom:10px;font-size:12px;color:#efe3c0;background:rgba(20,14,6,.6);
+    border-radius:8px;padding:5px 10px;letter-spacing:.3px}
+  #toasts{position:absolute;top:66px;right:10px;z-index:8;display:flex;flex-direction:column;gap:6px;align-items:flex-end}
+  .toast{background:rgba(24,16,6,.85);border:1px solid rgba(255,215,94,.45);color:#ffe9b0;padding:6px 12px;
+    border-radius:8px;font-size:14px;font-weight:600;box-shadow:0 3px 8px rgba(0,0,0,.4);animation:toastin .18s ease-out}
+  @keyframes toastin{from{transform:translateX(30px);opacity:0}to{transform:none;opacity:1}}
+  #dialog{position:absolute;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;background:rgba(8,6,2,.5)}
+  #dlg-box{width:min(92%,760px);max-height:86%;overflow:auto;background:linear-gradient(180deg,#f8eed6,#ecd9ae);
+    color:#4a3018;border:4px solid #6a522b;border-radius:14px;padding:16px 20px;box-shadow:0 16px 50px rgba(0,0,0,.6);
+    font-size:16px;line-height:1.7}
+  #dlg-box h3{margin:4px 0 10px;color:#7a4a12;font-size:20px;text-align:center}
+  #dlg-box textarea{width:100%;height:120px;font-family:Menlo,Consolas,monospace;font-size:11px;line-height:1.4;
+    border:2px solid #b89858;border-radius:6px;padding:6px;background:#fffdf5;color:#4a3018;resize:vertical}
+  #dlg-actions{display:flex;gap:10px;justify-content:center;margin-top:14px;flex-wrap:wrap}
+  button{font-family:inherit;font-size:15px;font-weight:700;cursor:pointer;color:#fdf3dd;background:linear-gradient(180deg,#8a6a3a,#5e4322);
+    border:2px solid #3d2c12;border-radius:9px;padding:8px 18px;transition:filter .1s}
+  button:hover{filter:brightness(1.18)}
+  button.gold{background:linear-gradient(180deg,#ffd75e,#e0a02a);color:#4a2e08;border-color:#a06c12}
+  button.ghost{background:rgba(255,255,255,.25);color:#5b3a1e;border-color:#a08050}
+  .shop-grid{display:flex;gap:14px;flex-wrap:wrap}
+  .shop-grid>div{flex:1;min-width:230px}
+  .shop-grid h4{color:#7a4a12;border-bottom:2px solid #d8b878;padding-bottom:4px;margin-bottom:8px}
+  .shop-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:5px 6px;border-radius:6px}
+  .shop-row:nth-child(odd){background:rgba(200,160,90,.18)}
+  .shop-row .nm{flex:1;font-weight:600}
+  .shop-row .pr{color:#8a5a10;font-weight:700;white-space:nowrap}
+  .shop-row button{padding:4px 10px;font-size:13px}
+  #tooltip{position:absolute;z-index:7;pointer-events:none;background:rgba(24,16,6,.88);border:1px solid rgba(255,215,94,.5);
+    color:#ffe9b0;padding:4px 9px;border-radius:6px;font-size:12px;font-weight:600;white-space:nowrap;
+    box-shadow:0 2px 8px rgba(0,0,0,.4)}
+  #energybar.low{border-color:#e05a50;animation:elow .9s ease-in-out infinite}
+  @keyframes elow{0%,100%{box-shadow:0 3px 10px rgba(0,0,0,.35)}50%{box-shadow:0 0 12px 3px rgba(224,90,80,.6)}}
+  .hidden{display:none !important}
+  #menu{position:absolute;inset:0;z-index:30;display:flex;align-items:center;justify-content:center;background:rgba(6,4,2,.68);backdrop-filter:blur(2px)}
+  #menu-box{width:min(92%,420px);background:linear-gradient(180deg,#2c3a1c,#18240e);border:3px solid #6a522b;border-radius:16px;
+    padding:22px 26px;text-align:center;box-shadow:0 18px 60px rgba(0,0,0,.7)}
+  #menu-box h2{color:#ffd75e;font-size:26px;margin-bottom:16px;letter-spacing:2px}
+  #menu-box button{display:block;width:100%;margin:8px 0}
+  #menu-sub{margin-top:14px;color:#d9c89a;font-size:14px;line-height:1.8;text-align:left;max-height:260px;overflow:auto}
+  #menu-ver{margin-top:12px;color:#8a7a5a;font-size:12px;letter-spacing:1px}
+  #loading{position:absolute;inset:0;z-index:40;display:flex;align-items:center;justify-content:center;background:rgba(10,14,6,.85);font-size:16px;text-align:center;line-height:2}
+  /* ---------- 产品化：浮动文字 / 转场 / 引导 / 触屏 ---------- */
+  #floaters{position:absolute;inset:0;pointer-events:none;z-index:6;overflow:hidden}
+  .floater{position:absolute;transform:translate(-50%,-50%);font-size:15px;font-weight:800;
+    color:#ffe08a;text-shadow:0 1px 3px rgba(0,0,0,.55);animation:floatUp 1.25s ease-out forwards;white-space:nowrap}
+  @keyframes floatUp{0%{opacity:0;transform:translate(-50%,-30%) scale(.7)}15%{opacity:1}
+    100%{opacity:0;transform:translate(-50%,-260%) scale(1.05)}}
+  #fade{position:absolute;inset:0;background:#0a0806;opacity:0;pointer-events:none;z-index:25;transition:opacity .45s}
+  #fade.on{opacity:1;pointer-events:auto}
+  #guide{position:absolute;left:8px;top:132px;width:238px;z-index:5;pointer-events:none;
+    background:rgba(20,28,12,.72);border:2px solid rgba(255,215,94,.4);border-radius:10px;padding:8px 12px;
+    font-size:12.5px;line-height:1.9;color:#efe3c0;box-shadow:0 3px 10px rgba(0,0,0,.35);transition:opacity .6s}
+  #guide h4{color:#ffd75e;font-size:13px;margin-bottom:2px;letter-spacing:1px}
+  #guide .gdone{color:#8fd070;text-decoration:line-through;opacity:.7}
+  #guide.out{opacity:0}
+  /* ---------- Game Boy 式控制甲板（画面下方，触屏/#pad 时显示） ---------- */
+  #touchdeck{display:none;justify-content:space-between;align-items:center;
+    width:min(97vw,960px);padding:12px 20px;border-radius:16px;
+    background:linear-gradient(180deg,#232d1a,#141c0e);border:2px solid rgba(255,215,94,.22);
+    box-shadow:0 10px 30px rgba(0,0,0,.5)}
+  body.has-pad{flex-direction:column;gap:12px}
+  body.has-pad #wrap{width:min(97vw,960px,calc((100vh - 205px)*1.5))}
+  body.has-pad #touchdeck{display:flex}
+  #tdpad{display:grid;grid-template-columns:repeat(3,54px);grid-template-rows:repeat(3,54px);gap:4px}
+  #tbtns{display:grid;grid-template-columns:repeat(3,52px);grid-template-rows:repeat(3,52px);gap:4px}
+  #tdpad button,#tbtns button{pointer-events:auto;background:linear-gradient(180deg,#3a4428,#242c18);color:#ffe9b0;
+    border:2px solid rgba(255,215,94,.4);border-radius:12px;font-size:20px;font-weight:800;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;touch-action:none;
+    -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;line-height:1;
+    box-shadow:0 3px 0 rgba(0,0,0,.45)}
+  #tdpad button.on,#tbtns button.on,#tdpad button:active,#tbtns button:active{transform:translateY(2px);box-shadow:0 1px 0 rgba(0,0,0,.45);filter:brightness(1.3)}
+  #tbtns button{border-radius:50%}
+  #tbtns button[data-act="a"]{color:#9fe08a;border-color:rgba(140,220,110,.6)}
+  #tbtns button[data-act="b"]{color:#f2a0a0;border-color:rgba(230,130,110,.6)}
+  #tbtns button[data-act="x"]{color:#9ac8f2;border-color:rgba(120,170,240,.6)}
+  #tbtns button[data-act="y"]{color:#f2d488;border-color:rgba(240,200,110,.6)}
+  #tbtns button i{font-style:normal;font-size:9px;font-weight:700;opacity:.8;margin-top:1px}
+  #tmid{display:flex;align-items:center;justify-content:center}
+  #tmid .grille{width:90px;height:44px;border-radius:10px;
+    background:repeating-linear-gradient(180deg,#2c3620 0 5px,#1a2212 5px 10px);
+    border:2px solid rgba(255,215,94,.18)}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="game" width="960" height="640"></canvas>
+  <div id="fx"></div>
+  <div id="rain"></div>
+  <div id="snow"></div>
+
+  <div id="hud">
+    <div id="topbar">
+      <span id="hud-date">春季 第1天</span>
+      <span id="hud-time">06:00</span>
+      <span id="hud-weather">☀️ 晴</span>
+      <span class="sp"></span>
+      <span id="hud-gold">₽ 500</span>
+      <span id="hud-save">💾</span>
+    </div>
+    <div id="energybar"><div id="energyfill"></div><span id="energytxt">体力 100/100</span></div>
+    <div id="formbar">变身形态：百变怪</div>
+    <div id="hotbar"></div>
+    <div id="hint">WASD/方向键 移动 · 空格/左键 使用 · E/右键 互动 · 1-9/滚轮 选物品 · Esc 菜单</div>
+  </div>
+
+  <div id="toasts"></div>
+  <div id="tooltip" class="hidden"></div>
+  <div id="floaters"></div>
+  <div id="guide" class="hidden"></div>
+  <div id="fade"></div>
+
+  <div id="dialog" class="hidden">
+    <div id="dlg-box"><div id="dlg-text"></div><div id="dlg-actions"></div></div>
+  </div>
+
+  <div id="menu" class="hidden">
+    <div id="menu-box">
+      <h2>⚡ 百变怪的农庄</h2>
+      <button data-act="continue" class="gold">继续游戏</button>
+      <button data-act="save">💾 保存游戏</button>
+      <button data-act="load">📂 读取存档</button>
+      <button data-act="export">📤 导出存档</button>
+      <button data-act="import">📥 导入存档</button>
+      <button data-act="new">🌱 新游戏</button>
+      <button data-act="sound">🔊 声音：开</button>
+      <button data-act="help">❓ 操作说明</button>
+      <button data-act="stats">📊 农场统计</button>
+      <div id="menu-sub"></div>
+      <div id="menu-ver">🌱 百变怪的农庄 v1.0</div>
+    </div>
+  </div>
+
+  <div id="loading">加载中…</div>
+</div>
+
+<!-- Game Boy 式控制甲板：位于画面下方黑色区域（触屏/ #pad 时显示） -->
+<div id="touchdeck" class="hidden">
+  <div id="tdpad">
+    <span></span><button data-k="w" aria-label="上">▲</button><span></span>
+    <button data-k="a" aria-label="左">◀</button><span></span><button data-k="d" aria-label="右">▶</button>
+    <span></span><button data-k="s" aria-label="下">▼</button><span></span>
+  </div>
+  <div id="tmid"><span class="grille"></span></div>
+  <div id="tbtns">
+    <span></span><button data-act="x" aria-label="上一件物品">X<i>上件</i></button><span></span>
+    <button data-act="y" aria-label="下一件物品">Y<i>下件</i></button><span></span><button data-act="a" aria-label="使用">A<i>使用</i></button>
+    <span></span><button data-act="b" aria-label="互动">B<i>互动</i></button><span></span>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* =====================================================================
+   宝可梦农场 · 百变怪的农庄 (Three.js 2.5D)
+   模拟逻辑可独立于 3D 渲染运行（便于测试）；3D 渲染需要加载 Three.js。
+   ===================================================================== */
+
+/* ---------------- 常量 ---------------- */
+const MAP_W = 48, MAP_H = 36;
+const VIEW_W = 960, VIEW_H = 640;
+const DAYS_PER_SEASON = 28;
+const MAX_ENERGY = 100;
+const INV_SLOTS = 9;
+const START_GOLD = 500;
+const SAVE_KEY = 'pokemon-farm-save-v1';
+const SEASON_ORDER = ['spring','summer','fall','winter'];
+const SEASON_NAMES = {spring:'春季', summer:'夏季', fall:'秋季', winter:'冬季'};
+const SEASON_ICONS = {spring:'🌸', summer:'☀️', fall:'🍁', winter:'❄️'};
+const SEASON_COLORS = {spring:'#7daf64', summer:'#658e49', fall:'#b48750', winter:'#dfe8ef'};
+const SEASON_GRASS2 = {spring:'#79a85d', summer:'#5e8245', fall:'#a57c4a', winter:'#d5dfe6'};
+const WEATHER_NAMES = {sunny:'晴', rain:'雨', snow:'雪'};
+const WEATHER_ICONS = {sunny:'☀️', rain:'🌧️', snow:'❄️'};
+
+const T_GRASS=0, T_TILLED=1, T_PATH=2, T_WATER=3, T_FLOOR=4, T_WALL=5;
+const D_NONE=0, D_TREE=1, D_STUMP=2, D_ROCK=3, D_TALL=4, D_FLOWER=5;
+
+const HOUSE = {x:10, y:8, w:5, h:4, doorX:12, doorY:11};
+const SHOP  = {x:34, y:22, w:2, h:2};
+const INT_W = 14, INT_H = 10;
+const BED_TILES = [[10,3],[11,3]];
+const TABLE_TILES = [[4,4],[4,5]];
+const INT_DOOR = [7,9];
+
+const DIRS = [[0,-1],[0,1],[-1,0],[1,0]]; // 上 下 左 右
+
+/* ---------------- 树果 & 物品数据 ---------------- */
+const CROPS = {
+  oran:   {name:'橙橙果', season:['spring'], days:4, seed:20,  sell:35, energy:10, icon:'🔵', color:'#3a6fd8', berry:0x3a6fd8},
+  pecha:  {name:'桃桃果', season:['spring'], days:6, seed:50,  sell:80, energy:15, icon:'🍑', color:'#f2a0c0', berry:0xf2a0c0},
+  sitrus: {name:'文柚果', season:['spring'], days:8, seed:100, sell:120,energy:25, icon:'🍋', color:'#f0c838', berry:0xf0c838},
+  cheri:  {name:'樱子果', season:['summer'], days:4, seed:20,  sell:35, energy:10, icon:'🍒', color:'#e04848', berry:0xe04848},
+  rawst:  {name:'莓莓果', season:['summer'], days:6, seed:50,  sell:80, energy:15, icon:'🫐', color:'#58b8a0', berry:0x58b8a0},
+  leppa:  {name:'利木果', season:['summer'], days:8, seed:80,  sell:50, energy:12, icon:'🍇', color:'#b06ad0', berry:0xb06ad0},
+  aspear: {name:'木子果', season:['fall'], days:6, seed:50,   sell:90, energy:16, icon:'🍏', color:'#8ac830', berry:0x8ac830},
+  persim: {name:'香柚果', season:['fall'], days:10, seed:100, sell:140,energy:22, icon:'🍊', color:'#e88830', berry:0xe88830},
+  razz:   {name:'乐芭果', season:['fall'], days:12, seed:120, sell:200,energy:28, icon:'🍓', color:'#d04848', berry:0xd04848},
+  snow:   {name:'雪绒果', season:['winter'], days:5, seed:60,  sell:110,energy:18, icon:'⚪', color:'#dce8f4', berry:0xdce8f4},
+};
+
+const ITEMS = {};
+ITEMS.tool_hoe = {name:'地鼠锄', kind:'tool', icon:'⛏', form:'diglett'};
+ITEMS.tool_can = {name:'车厘龟壶', kind:'tool', icon:'💧', form:'squirtle'};
+ITEMS.tool_axe = {name:'螳螂镰', kind:'tool', icon:'🗡', form:'scyther'};
+ITEMS.tool_pick= {name:'拳石镐', kind:'tool', icon:'👊', form:'geodude'};
+for (const id in CROPS){
+  const c = CROPS[id];
+  ITEMS['seed_'+id] = {name:c.name+'种', kind:'seed', crop:id, icon:'🌱', buy:c.seed};
+  ITEMS['crop_'+id] = {name:c.name, kind:'crop', icon:c.icon, sell:c.sell, energy:c.energy};
+}
+ITEMS.wood  = {name:'木材', kind:'material', icon:'🪵', sell:2};
+ITEMS.stone = {name:'石头', kind:'material', icon:'🪨', sell:2};
+ITEMS.salad = {name:'哞哞鲜乳', kind:'food', icon:'🥛', sell:50, energy:30, buy:100};
+ITEMS.tool_rod = {name:'可达鸭钓竿', kind:'tool', icon:'🎣', form:'psyduck', buy:250};
+ITEMS.fish_magikarp = {name:'鲤鱼王', kind:'food', icon:'🐟', sell:30, energy:6};
+ITEMS.fish_goldeen   = {name:'角金鱼', kind:'food', icon:'🐠', sell:70, energy:12};
+ITEMS.fish_gyarados  = {name:'暴鲤龙', kind:'food', icon:'🐋', sell:600, energy:40};
+
+/* 变身形态中文名 */
+const FORM_NAMES = {
+  ditto:'百变怪', diglett:'地鼠', squirtle:'车厘龟', scyther:'飞天螳螂',
+  geodude:'小拳石', bulbasaur:'妙蛙种子', psyduck:'可达鸭',
+  pidgey:'波波', magnemite:'小磁怪', oddish:'走路草',
+  pikachu:'皮卡丘', eevee:'伊布', charmander:'小火龙', snorlax:'卡比兽', meowth:'喵喵',
+};
+
+/* ---------------- 技能（商店研习，随成长解锁） ----------------
+   req: [统计字段, 需要数值, 展示说明]；null 表示无需解锁条件 */
+const SKILLS = {
+  dash:      {name:'⚡ 电光一闪', desc:'按住 Shift 冲刺移动（速度×1.6）', cost:500,
+              req:null},
+  rainring:  {name:'💧 求雨圈', desc:'浇水范围扩大到 3×3', cost:1000,
+              req:['watered', 30, '浇灌 30 次']},
+  cyclone:   {name:'🌪 旋风刀', desc:'砍树木材翻倍且少耗 1 体力', cost:1500,
+              req:['chopped', 15, '砍伐 15 棵']},
+  rockblast: {name:'🪨 岩崩', desc:'采石石头翻倍且少耗 1 体力', cost:1500,
+              req:['mined', 15, '开采 15 块']},
+  angler:    {name:'🎣 悠闲垂钓', desc:'鱼更快咬钩、更难逃脱', cost:2000,
+              req:['fished', 10, '钓鱼 10 次']},
+  vigor:     {name:'💤 卡比兽之力', desc:'体力上限 +25', cost:2500,
+              req:['daysPlayed', 14, '游玩 14 天']},
+  sunlight:  {name:'🌱 日光束', desc:'按 F：浇灌并催熟周围 5×5 作物（耗 20 体力）', cost:3000,
+              req:['harvested', 40, '收获 40 个']},
+};
+const BAG_PRICES = [800, 2000, 4000]; // 背包扩容 9→12→15→18 格
+
+/* ---------------- 野生宝可梦（混熟后学会变身成对方） ----------------
+   每天随机出没；聊天 +5 / 喂食 +15（各一次/天）；好感 100 学会变身并获得被动 */
+const WILD_POOL = {
+  pidgey:    {name:'波波', perk:'顺风：移动速度 +25%',
+              lines:['啾…？（警惕地打量着你）','啾啾！（歪着头靠近了一点）','啾♪（落在你身边蹦蹦跳跳）','啾——！（亲昵地蹭了蹭百变怪）']},
+  magnemite: {name:'小磁怪', perk:'磁力：伐木 / 采石产出 +1',
+              lines:['滋…（电流声警惕地响起）','滋滋？（好奇地绕着你转圈）','滋滋♪（吸附在旁边不肯走）','滋——！（愿意分享磁场的秘密）']},
+  oddish:    {name:'走路草', perk:'晨露：浇水少耗 1 点体力',
+              lines:['……（害羞地缩进草丛）','呀！（小步小步地挪近）','呀♪（蹭着裤脚洒下晨露）','呀——！（教你叶尖凝露的诀窍）']},
+};
+
+/* ---------------- 工具函数 ---------------- */
+const $ = id => document.getElementById(id);
+const clamp = (v,a,b)=> v<a?a:(v>b?b:v);
+function mulberry32(seed){
+  return function(){
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+function hash2(x,y){ let h = x*374761393 + y*668265263; h = (h ^ (h>>>13)) * 1274126177; return ((h ^ (h>>>16)) >>> 0); }
+function hexToRgb(hex){ const n = parseInt(hex.slice(1),16); return [(n>>16)&255,(n>>8)&255,n&255]; }
+function shadeColor(hex, delta){ if (delta>128) delta-=256; // Uint8Array 回绕：-20..-1 存成了 236..255
+  const [r,g,b] = hexToRgb(hex); const c = v => clamp(v+delta,0,255); return 'rgb('+c(r)+','+c(g)+','+c(b)+')'; }
+const idx = (x,y) => y*MAP_W+x;
+const idxI = (x,y) => y*INT_W+x;
+const worldX = tx => tx - MAP_W/2;
+const worldZ = ty => ty - MAP_H/2;
+
+/* ---------------- 地图生成 ---------------- */
+function genMap(){
+  const R = mulberry32(20240615);
+  const tile = new Uint8Array(MAP_W*MAP_H);
+  const deco = new Uint8Array(MAP_W*MAP_H);
+  const shade = new Uint8Array(MAP_W*MAP_H);
+  for (let i=0;i<tile.length;i++) shade[i] = Math.floor(R()*41)-20;
+  for (let y=0;y<MAP_H;y++) for (let x=0;x<MAP_W;x++){
+    if (x<2||y<2||x>=MAP_W-2||y>=MAP_H-2) deco[idx(x,y)] = D_TREE;
+  }
+  for (let y=27;y<=33;y++) for (let x=40;x<=45;x++){
+    const dx=(x-42.5)/3, dy=(y-30)/2.9;
+    if (dx*dx+dy*dy <= 1) tile[idx(x,y)] = T_WATER;
+  }
+  for (let y=12;y<=24;y++) if (tile[idx(12,y)]===T_GRASS) tile[idx(12,y)] = T_PATH;
+  for (let x=12;x<=34;x++) if (tile[idx(x,24)]===T_GRASS) tile[idx(x,24)] = T_PATH;
+  for (let y=8;y<=11;y++) for (let x=16;x<=19;x++) tile[idx(x,y)] = T_TILLED;
+
+  const okGrass = (x,y,minDist)=>{
+    if (x<3||y<3||x>=MAP_W-3||y>=MAP_H-3) return false;
+    const i = idx(x,y);
+    if (tile[i]!==T_GRASS) return false;
+    if (x>=HOUSE.x-1 && x<=HOUSE.x+HOUSE.w && y>=HOUSE.y-1 && y<=HOUSE.y+HOUSE.h) return false;
+    if (x>=SHOP.x-1 && x<=SHOP.x+SHOP.w && y>=SHOP.y-1 && y<=SHOP.y+SHOP.h) return false;
+    for (let dy=-minDist;dy<=minDist;dy++) for (let dx=-minDist;dx<=minDist;dx++){
+      const nx=x+dx, ny=y+dy;
+      if (nx<0||ny<0||nx>=MAP_W||ny>=MAP_H) continue;
+      const ni=idx(nx,ny);
+      if (deco[ni]===D_TREE||deco[ni]===D_ROCK||tile[ni]===T_WATER) return false;
+    }
+    return true;
+  };
+  let trees=0;
+  for (let tries=0; tries<400 && trees<42; tries++){
+    const x=3+Math.floor(R()*(MAP_W-6)), y=3+Math.floor(R()*(MAP_H-6));
+    if (okGrass(x,y,1)){ deco[idx(x,y)]=D_TREE; trees++; }
+  }
+  let rocks=0;
+  for (let tries=0; tries<300 && rocks<18; tries++){
+    const x=3+Math.floor(R()*(MAP_W-6)), y=3+Math.floor(R()*(MAP_H-6));
+    if (okGrass(x,y,1)){ deco[idx(x,y)]=D_ROCK; rocks++; }
+  }
+  let tall=0;
+  for (let tries=0; tries<300 && tall<26; tries++){
+    const x=2+Math.floor(R()*(MAP_W-4)), y=2+Math.floor(R()*(MAP_H-4));
+    if (tile[idx(x,y)]===T_GRASS && deco[idx(x,y)]===D_NONE){ deco[idx(x,y)]=D_TALL; tall++; }
+  }
+  let fl=0;
+  for (let tries=0; tries<200 && fl<12; tries++){
+    const x=2+Math.floor(R()*(MAP_W-4)), y=2+Math.floor(R()*(MAP_H-4));
+    if (tile[idx(x,y)]===T_GRASS && deco[idx(x,y)]===D_NONE){ deco[idx(x,y)]=D_FLOWER; fl++; }
+  }
+  return {tile, deco, shade};
+}
+
+function genInterior(){
+  const tile = new Uint8Array(INT_W*INT_H);
+  for (let y=0;y<INT_H;y++) for (let x=0;x<INT_W;x++){
+    tile[idxI(x,y)] = (x===0||y===0||x===INT_W-1||y===INT_H-1) ? T_WALL : T_FLOOR;
+  }
+  return {tile, watered:new Uint8Array(INT_W*INT_H), crops:new Array(INT_W*INT_H).fill(null)};
+}
+
+/* ---------------- 游戏状态 ---------------- */
+let game = null, interior = null;
+let inHouse = false;
+let player = {x:12.5, y:13.5, dir:1, moving:false, mx:12.5, my:13.5, walkT:0, form:'ditto'};
+let selected = 0;
+let dialog = null, menuOpen = false, soundOn = true, forceSleeping = false;
+let fishing = null; // {phase:'wait'|'bite', t, biteAt, tx, ty}
+const keys = {};
+
+function newGame(){
+  const m = genMap();
+  game = {
+    season:'spring', day:1, weather:'sunny', time:6*60,
+    gold:START_GOLD, energy:MAX_ENERGY,
+    inv:[
+      {id:'tool_hoe', n:1}, {id:'tool_can', n:1}, {id:'tool_axe', n:1}, {id:'tool_pick', n:1},
+      {id:'seed_oran', n:15}, {id:'seed_pecha', n:15}, {id:'wood', n:10}, {id:'tool_rod', n:1}, {id:null, n:0},
+    ],
+    tile:m.tile, deco:m.deco, shade:m.shade,
+    watered:new Uint8Array(MAP_W*MAP_H),
+    crops:new Array(MAP_W*MAP_H).fill(null),
+    stats:{earned:0, harvested:0, chopped:0, mined:0, daysPlayed:0, watered:0, fished:0},
+    toolLevel:{},
+    skills:[], bagLv:0,
+    guide:{till:0, plant:0, water:0, sleep:0, harvest:0, sell:0}, guideDone:false,
+    achv:{},
+    wild:{}, wilds:[], wildForm:null,
+    npcs:[
+      {id:'pikachu', name:'皮卡丘', x:20.5, y:20.5, target:null, wait:1, line:'皮卡皮卡！今天也要充满电力地种田哦！', line2:'雨天我的脸颊会格外闪亮～'},
+      {id:'eevee', name:'伊布', x:30.5, y:26.5, target:null, wait:2, line:'伊布～！农场的空气真新鲜！', line2:'池塘里波光闪闪的，用钓竿能钓到什么呢？'},
+      {id:'charmander', name:'小火龙', x:26.5, y:14.5, target:null, wait:3, line:'呜哇～尾巴的火不能碰到干草哦。', line2:'秋天的树果烤一烤更香呢！'},
+      {id:'snorlax', name:'卡比兽', x:22.5, y:15.5, target:null, wait:99999, line:'呼噜……（卡比兽在睡大觉）', line2:'zzz……饭好了叫我……'},
+    ],
+    npcLine:0,
+  };
+  interior = genInterior();
+  inHouse = false;
+  player = {x:12.5, y:13.5, dir:1, moving:false, mx:12.5, my:13.5, walkT:0, form:'ditto'};
+  selected = 0;
+  fishing = null;
+  initWildFriendship();
+  spawnWilds();
+  applyForm();
+  updateHud();
+  renderHotbar();
+  refreshWorld3D();
+  rebuildNPCs3D();
+  rebuildWilds3D();
+  snapCamera();
+  showMsg(['亲爱的训练家：','欢迎来到百变怪的农庄！百变怪会用「变身」替你干活。','选中锄头会变成地鼠开垦，选中水壶变成车厘龟浇水，','选中镰刀变成飞天螳螂砍树，选中镐子变成小拳石敲石头。','种下树果，收获后卖给喵喵的杂货摊吧！','带上钓竿到池塘边，还能变成可达鸭钓鱼哦！','跟着左上角的「🌟 农活入门」清单做，很快就能上手。'], ()=>{
+    toast('提示：按 Esc 可查看操作说明');
+  });
+}
+
+/* ---------------- 存档 ---------------- */
+function saveGame(){
+  if (!game) return;
+  try{
+    const data = {
+      v:3, season:game.season, day:game.day, weather:game.weather, time:game.time,
+      gold:game.gold, energy:game.energy, inv:game.inv,
+      tile:Array.from(game.tile), deco:Array.from(game.deco), shade:Array.from(game.shade),
+      watered:Array.from(game.watered), crops:game.crops,
+      stats:game.stats, npcs:game.npcs, npcLine:game.npcLine, toolLevel:game.toolLevel,
+      skills:game.skills, bagLv:game.bagLv,
+      guide:game.guide, guideDone:game.guideDone, achv:game.achv,
+      wild:game.wild, wilds:game.wilds, wildForm:game.wildForm,
+      player:{x:player.x,y:player.y,dir:player.dir}, inHouse, selected, soundOn,
+    };
+    localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+    flashSave();
+  }catch(e){}
+}
+let saveFlashTimer = 0;
+function flashSave(){
+  const el = $('hud-save');
+  if (!el) return;
+  el.style.opacity = '1';
+  clearTimeout(saveFlashTimer);
+  saveFlashTimer = setTimeout(()=>{ el.style.opacity = '0'; }, 1100);
+}
+function hasSave(){ try{ return !!localStorage.getItem(SAVE_KEY); }catch(e){ return false; } }
+/* ---------------- 存档码（跨浏览器 / 跨打开方式搬运进度） ----------------
+   localStorage 按「源」隔离：file:// 打开和 http://localhost 打开是两个独立的存档空间，
+   导出/导入存档码可以把进度在它们之间迁移。 */
+function encodeSaveCode(raw){ try{ return btoa(unescape(encodeURIComponent(raw))); }catch(e){ return ''; } }
+function decodeSaveCode(code){ try{ return decodeURIComponent(escape(atob(code.trim()))); }catch(e){ return null; } }
+function exportSave(){
+  if (!game) return;
+  saveGame();
+  let raw = '';
+  try{ raw = localStorage.getItem(SAVE_KEY)||''; }catch(e){}
+  const code = encodeSaveCode(raw);
+  if (!code){ toast('导出失败'); return; }
+  showDialog(
+    '<h3>📤 导出存档</h3>'+
+    '<div style="font-size:14px;margin-bottom:8px">复制这串存档代码，到其他浏览器 / 打开方式里用「📥 导入存档」即可恢复进度。</div>'+
+    '<textarea id="save-code" readonly>'+code+'</textarea>',
+    [{label:'📋 自动复制', gold:true, fn:()=>copySaveCode(code)},
+     {label:'关闭', ghost:true, fn:closeDialog}]
+  );
+  const ta = $('save-code');
+  if (ta) ta.addEventListener('focus', ()=>ta.select());
+}
+function copySaveCode(code){
+  const done = ()=>toast('✅ 已复制到剪贴板');
+  const fallback = ()=>{
+    const ta = $('save-code');
+    if (ta){ ta.focus(); ta.select(); toast('请按 Ctrl/Cmd+C 手动复制'); }
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(code).then(done, fallback);
+  } else fallback();
+}
+function importSave(){
+  showDialog(
+    '<h3>📥 导入存档</h3>'+
+    '<div style="font-size:14px;margin-bottom:8px">粘贴之前导出的存档代码（会覆盖当前进度）。</div>'+
+    '<textarea id="save-in" placeholder="在这里粘贴存档代码…"></textarea>',
+    [{label:'导入', gold:true, fn:doImportSave},
+     {label:'取消', ghost:true, fn:closeDialog}]
+  );
+}
+function doImportSave(){
+  const ta = $('save-in');
+  const code = ta ? String(ta.value||'').trim() : '';
+  if (!code){ toast('请先粘贴存档代码'); return; }
+  const raw = decodeSaveCode(code);
+  if (!raw || raw[0]!=='{'){ toast('存档代码无效'); sfx('error'); return; }
+  let backup = '';
+  try{ backup = localStorage.getItem(SAVE_KEY)||''; }catch(e){}
+  try{ localStorage.setItem(SAVE_KEY, raw); }catch(e){}
+  if (loadGame()){
+    fishing = null;
+    closeDialog();
+    saveGame();
+    sfx('coin');
+    toast('📂 存档导入成功！');
+  } else {
+    try{ localStorage.setItem(SAVE_KEY, backup); }catch(e){}
+    toast('存档解析失败，已保留原进度');
+    sfx('error');
+  }
+}
+function loadGame(){
+  try{
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return false;
+    const d = JSON.parse(raw);
+    if (!d || (d.v!==1 && d.v!==2 && d.v!==3) || !Array.isArray(d.tile) || d.tile.length!==MAP_W*MAP_H) return false;
+
+    // 兼容旧/损坏存档：缺失的数组给出安全默认值，避免读档即崩
+    const len = MAP_W*MAP_H;
+    const toBytes = (arr, fill) => {
+      if (Array.isArray(arr) && arr.length === len) return Uint8Array.from(arr);
+      const out = new Uint8Array(len);
+      if (fill) out.fill(fill);
+      return out;
+    };
+    const bagLv = clamp(parseInt(d.bagLv, 10)||0, 0, BAG_PRICES.length);
+    const totalSlots = INV_SLOTS + 3*bagLv;
+    const skills = Array.isArray(d.skills) ? d.skills.filter(id => SKILLS[id]) : [];
+    const inv = Array.isArray(d.inv) ? d.inv.slice(0, totalSlots) : [];
+    while (inv.length < totalSlots) inv.push({id:null, n:0});
+    for (let i=0;i<totalSlots;i++){
+      const s = inv[i];
+      const id = s && ITEMS[s.id] ? s.id : null;
+      const n = s ? Math.max(0, parseInt(s.n, 10)||0) : 0;
+      inv[i] = (id && n>0) ? {id, n} : {id:null, n:0};
+    }
+    const stats = Object.assign({earned:0, harvested:0, chopped:0, mined:0, daysPlayed:0, watered:0, fished:0}, d.stats || {});
+    const playerData = d.player || {};
+    const toolLevel = {};
+    for (const k of ['tool_hoe','tool_can','tool_axe','tool_pick','tool_rod'])
+      toolLevel[k] = clamp(parseInt(d.toolLevel && d.toolLevel[k], 10)||0, 0, 2);
+    const rawCrops = Array.isArray(d.crops) && d.crops.length === len ? d.crops : new Array(len).fill(null);
+    const crops = rawCrops.map(c => {
+      if (!c || !CROPS[c.type]) return null;
+      return {type:c.type, rem: clamp(parseInt(c.rem, 10)||0, 0, CROPS[c.type].days)};
+    });
+    const npcs = (Array.isArray(d.npcs) ? d.npcs : []).filter(n => n && typeof n.id === 'string').map(n => ({
+      ...n,
+      x: Number.isFinite(Number(n.x)) ? Number(n.x) : 4.5,
+      y: Number.isFinite(Number(n.y)) ? Number(n.y) : 4.5,
+      target: Array.isArray(n.target) ? n.target : null,
+      wait: Math.max(0, Number(n.wait)||0),
+    }));
+
+    game = {
+      season: SEASON_ORDER.includes(d.season) ? d.season : 'spring',
+      day: clamp(parseInt(d.day, 10)||1, 1, DAYS_PER_SEASON),
+      weather: WEATHER_NAMES[d.weather] ? d.weather : 'sunny',
+      time: clamp(Number(d.time)||0, 0, 26*60),
+      gold: Math.max(0, Number(d.gold)||0),
+      energy: Number.isFinite(Number(d.energy)) ? clamp(Number(d.energy), 0, MAX_ENERGY+25) : MAX_ENERGY,
+      inv,
+      tile:toBytes(d.tile), deco:toBytes(d.deco), shade:toBytes(d.shade),
+      watered:toBytes(d.watered),
+      crops,
+      stats, npcs, npcLine: parseInt(d.npcLine, 10)||0,
+      toolLevel, skills, bagLv,
+      guide: typeof d.guide==='object' && d.guide
+        ? Object.assign({till:0, plant:0, water:0, sleep:0, harvest:0, sell:0}, d.guide) 
+        : {till:0, plant:0, water:0, sleep:0, harvest:0, sell:0},
+      guideDone: !!d.guideDone,
+      achv: typeof d.achv==='object' && d.achv ? d.achv : {},
+      wild: typeof d.wild==='object' && d.wild ? d.wild : {},
+      wilds: Array.isArray(d.wilds) ? d.wilds.filter(w=>w && WILD_POOL[w.id] && Number.isFinite(Number(w.x))) : [],
+      wildForm: d.wildForm && WILD_POOL[d.wildForm] ? d.wildForm : null,
+    };
+    interior = genInterior();
+    initWildFriendship();
+    inHouse = !!d.inHouse;
+    soundOn = typeof d.soundOn === 'boolean' ? d.soundOn : true;
+    const maxX = inHouse ? INT_W-1 : MAP_W-1;
+    const maxY = inHouse ? INT_H-1 : MAP_H-1;
+    player.x = clamp(Number(playerData.x)||0, 0, maxX);
+    player.y = clamp(Number(playerData.y)||0, 0, maxY);
+    player.dir = clamp(parseInt(playerData.dir, 10)||0, 0, 3);
+    player.moving = false; player.mx = player.x; player.my = player.y;
+    selected = clamp(d.selected||0, 0, totalSlots-1);
+    fishing = null;
+    applyForm();
+    updateHud(); renderHotbar();
+    refreshWorld3D();
+    rebuildNPCs3D();
+    rebuildWilds3D();
+    snapCamera();
+    return true;
+  }catch(e){ return false; }
+}
+
+/* ---------------- 地形判定 ---------------- */
+function interiorSolid(tx,ty){
+  if (tx<0||ty<0||tx>=INT_W||ty>=INT_H) return true;
+  if (interior.tile[idxI(tx,ty)]===T_WALL) return true;
+  for (const [bx,by] of BED_TILES) if (bx===tx&&by===ty) return true;
+  for (const [bx,by] of TABLE_TILES) if (bx===tx&&by===ty) return true;
+  return false;
+}
+function isSolid(tx,ty){
+  if (inHouse) return interiorSolid(tx,ty);
+  if (tx<0||ty<0||tx>=MAP_W||ty>=MAP_H) return true;
+  const i = idx(tx,ty);
+  if (game.tile[i]===T_WATER) return true;
+  if (game.deco[i]===D_TREE||game.deco[i]===D_ROCK) return true;
+  if (tx>=HOUSE.x&&tx<HOUSE.x+HOUSE.w&&ty>=HOUSE.y&&ty<HOUSE.y+HOUSE.h) return true;
+  if (tx>=SHOP.x&&tx<SHOP.x+SHOP.w&&ty>=SHOP.y&&ty<SHOP.y+SHOP.h) return true;
+  return false;
+}
+
+/* ---------------- 输入 ---------------- */
+const canvas = $('game');
+
+document.addEventListener('keydown', e=>{
+  const k = e.key.toLowerCase();
+  if ([' ','arrowup','arrowdown','arrowleft','arrowright','tab'].includes(k)) e.preventDefault();
+  keys[k] = true;
+  if (k==='escape'){ if (menuOpen) closeMenu(); else if (dialog) closeDialog(); else openMenu(); }
+  if (k==='e' && !menuOpen && !dialog && !forceSleeping) interact();
+  if (k===' ' && !menuOpen && !dialog && !forceSleeping) useSelected();
+  if (k==='f' && !menuOpen && !dialog && !forceSleeping) useSunlight();
+  if (k==='t' && !menuOpen && !dialog && !forceSleeping) cycleWildForm();
+  if (k==='q' && !menuOpen && !dialog) cycleSlot(-1);
+  if (k==='r' && !menuOpen && !dialog) cycleSlot(1);
+  const n = parseInt(k,10);
+  if (n>=1 && n<=INV_SLOTS && !menuOpen && !dialog) selectSlot(n-1);
+});
+document.addEventListener('keyup', e=>{ keys[e.key.toLowerCase()] = false; });
+// 所有按钮的统一点击音（捕获阶段，不影响原逻辑）
+document.addEventListener('click', e=>{ if (e.target && e.target.closest && e.target.closest('button')) sfx('ui'); }, true);
+// WebGL 上下文丢失兜底提示
+canvas.addEventListener('webglcontextlost', e=>{
+  e.preventDefault();
+  const l = $('loading');
+  if (l){ l.style.display = 'flex'; l.innerHTML = '⚠️ 显卡渲染上下文丢失，请刷新页面重试。'; }
+});
+
+canvas.addEventListener('contextmenu', e=>e.preventDefault());
+canvas.addEventListener('mousedown', e=>{
+  if (menuOpen || dialog) return;
+  // 钓鱼中鼠标左右键都只用于收竿/取消，避免误触其他动作
+  if (fishing){ handleFishingInput(); return; }
+  const tile = pickTile(e);
+  if (!tile) return;
+  if (e.button===2){ interactAt(tile[0], tile[1]); return; }
+  if (e.button===0){
+    const px = Math.floor(player.x), py = Math.floor(player.y);
+    const dist = Math.max(Math.abs(tile[0]-px), Math.abs(tile[1]-py));
+    if (dist<=1) useOnTile(tile[0], tile[1]);
+  }
+});
+$('wrap').addEventListener('wheel', e=>{
+  e.preventDefault();
+  if (menuOpen || dialog) return;
+  cycleSlot(e.deltaY>0 ? 1 : -1);
+}, {passive:false});
+
+function pickTile(e){
+  if (!px2) return null;
+  const rect = canvas.getBoundingClientRect();
+  const mx = ((e.clientX-rect.left)/rect.width)*VIEW_W;
+  const my = ((e.clientY-rect.top)/rect.height)*VIEW_H;
+  const wx = mx/S + camLeftX(), wy = my/S + camTopY();
+  if (inHouse){
+    const tx = Math.floor(wx), ty = Math.floor(wy);
+    if (tx<0||ty<0||tx>=INT_W||ty>=INT_H) return null;
+    return [tx, ty];
+  }
+  const tx = Math.floor(wx), ty = Math.floor(wy);
+  if (tx<0||ty<0||tx>=MAP_W||ty>=MAP_H) return null;
+  return [tx, ty];
+}
+
+/* ---------------- 悬停提示 ---------------- */
+const wrapEl = $('wrap');
+function hideTip(){ $('tooltip').classList.add('hidden'); }
+canvas.addEventListener('mousemove', e=>{
+  const tip = $('tooltip');
+  if (!game || inHouse || menuOpen || dialog || !renderer){ tip.classList.add('hidden'); return; }
+  const t = pickTile(e);
+  if (!t){ tip.classList.add('hidden'); return; }
+  const [tx,ty] = t;
+  if (tx<0||ty<0||tx>=MAP_W||ty>=MAP_H){ tip.classList.add('hidden'); return; }
+  let text = '';
+  const wildH = wildAt(tx,ty);
+  const c = cropAt(tx,ty);
+  if (wildH){
+    const st = game.wild[wildH.id];
+    text = '🌿 野生'+WILD_POOL[wildH.id].name+' · 好感 '+st.fp+'/100 · 按 E 互动（聊天/喂食）';
+  } else if (c){
+    const def = CROPS[c.type];
+    text = def.icon+' '+def.name+' · ' + (c.rem<=0 ? '✅ 可以收获' : '还需生长 '+c.rem+' 天') + (wateredAt(tx,ty) ? ' · 💧' : '');
+  } else {
+    const d = decoAt(tx,ty);
+    if (d===D_TREE) text = '🌳 树木 · 螳螂镰可砍伐（得木材）';
+    else if (d===D_STUMP) text = '🪵 树桩';
+    else if (d===D_ROCK) text = '🪨 岩石 · 拳石镐可开采（得石头）';
+    else if (tileAt(tx,ty)===T_WATER) text = '💧 池塘 · 面向水面用钓竿可以钓鱼';
+    else if (tileAt(tx,ty)===T_TILLED) text = wateredAt(tx,ty) ? '🟫 耕地 · 💧已浇水' : '🟫 耕地 · 未浇水';
+  }
+  if (!text){ tip.classList.add('hidden'); return; }
+  tip.textContent = text;
+  tip.classList.remove('hidden');
+  const r = wrapEl.getBoundingClientRect();
+  const x = Math.min(e.clientX - r.left + 14, r.width - tip.offsetWidth - 6);
+  tip.style.left = x + 'px';
+  tip.style.top = (e.clientY - r.top - 10) + 'px';
+});
+canvas.addEventListener('mouseleave', hideTip);
+
+/* ---------------- HUD ---------------- */
+function fmtTime(t){
+  let h = Math.floor(t/60), m = Math.floor(t%60);
+  h = h%24;
+  return (h<10?'0':'')+h+':'+(m<10?'0':'')+m;
+}
+function updateHud(){
+  if (!game) return;
+  $('hud-date').textContent = SEASON_ICONS[game.season]+' '+SEASON_NAMES[game.season]+' 第'+game.day+'天';
+  $('hud-time').textContent = fmtTime(game.time);
+  $('hud-weather').textContent = WEATHER_ICONS[game.weather]+' '+WEATHER_NAMES[game.weather];
+  $('hud-gold').textContent = '₽ '+game.gold;
+  const mE = maxEnergy();
+  const pct = Math.round(game.energy/mE*100);
+  $('energyfill').style.width = pct+'%';
+  if (game.energy < 20) $('energybar').classList.add('low');
+  else $('energybar').classList.remove('low');
+  $('energytxt').textContent = '体力 '+Math.max(0,Math.round(game.energy))+'/'+mE;
+  let hint = inHouse ? 'E 睡觉 / 出门 · 屋内不能使用工具' : 'WASD/方向键 移动 · 空格/左键 使用 · E/右键 互动 · 1-9/滚轮 选物品 · Esc 菜单';
+  if (!inHouse && hasSkill('dash')) hint = hint.replace('移动 ·', '移动(Shift冲刺) ·');
+  if (!inHouse && hasSkill('sunlight')) hint += ' · F 日光束';
+  const wildLearned = game && game.wild && Object.values(game.wild).some(w=>w.learned);
+  if (!inHouse && wildLearned) hint += ' · T 变身';
+  $('hint').textContent = hint;
+}
+function updateFormHud(){
+  $('formbar').textContent = '变身形态：' + (FORM_NAMES[player.form]||player.form);
+}
+function toast(msg){
+  const box = $('toasts');
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.textContent = msg;
+  box.appendChild(el);
+  setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .4s'; setTimeout(()=>el.remove(), 420); }, 2300);
+}
+
+/* ---------------- 新手引导清单 ---------------- */
+const GUIDE_STEPS = [
+  {id:'till',    label:'开垦草地（选锄头点草地）'},
+  {id:'plant',   label:'种下树果（选种子点耕地）'},
+  {id:'water',   label:'浇水（选水壶点耕地）'},
+  {id:'sleep',   label:'睡觉到第二天（屋里上床）'},
+  {id:'harvest', label:'收获成熟的树果'},
+  {id:'sell',    label:'卖给喵喵换金币'},
+];
+function initGuide(){
+  // 老存档按统计回填已完成步骤
+  const g = game.guide;
+  if (game.stats.harvested>0){ ['till','plant','water','harvest'].forEach(k=>g[k]=1); }
+  if (game.stats.earned>0){ g.sell = 1; }
+  if (game.stats.daysPlayed>1){ g.sleep = 1; }
+  if (GUIDE_STEPS.every(s=>g[s.id])){ game.guideDone = true; return; }
+  refreshGuide(false);
+}
+function markGuide(id){
+  if (!game || game.guideDone || game.guide[id]) return;
+  game.guide[id] = 1;
+  sfx('ui');
+  if (GUIDE_STEPS.every(s=>game.guide[s.id])){
+    game.guideDone = true;
+    const el = $('guide');
+    if (el){ el.classList.add('out'); setTimeout(()=>el.classList.add('hidden'), 700); }
+    toast('🌟 农活入门完成！接下来自由经营你的农庄吧');
+    unlockAchv('rookie');
+  } else refreshGuide(false);
+}
+function refreshGuide(){
+  const el = $('guide');
+  if (!el || !game) return;
+  if (game.guideDone){ el.classList.add('hidden'); return; }
+  el.classList.remove('hidden');
+  el.innerHTML = '<h4>🌟 农活入门</h4>' + GUIDE_STEPS.map(s=>
+    '<div'+(game.guide[s.id]?' class="gdone"':'')+'>'+(game.guide[s.id]?'✓':'○')+' '+s.label+'</div>').join('');
+}
+
+/* ---------------- 里程碑成就 ---------------- */
+const ACHV_DEFS = {
+  first_till:   {icon:'⛏', name:'破土'},
+  first_harvest:{icon:'🌸', name:'第一份收成'},
+  first_sale:   {icon:'₽', name:'开张大吉'},
+  first_fish:   {icon:'🎣', name:'垂钓新手'},
+  rookie:       {icon:'🌟', name:'农活入门'},
+  friend:       {icon:'🤝', name:'挚友'},
+  rich:         {icon:'💰', name:'小有积蓄（累计 1000₽）'},
+  four_seasons: {icon:'🍁', name:'四季农人（玩满一年）'},
+};
+function unlockAchv(id){
+  if (!game || !ACHV_DEFS[id] || (game.achv && game.achv[id])) return;
+  if (!game.achv) game.achv = {};
+  game.achv[id] = 1;
+  const a = ACHV_DEFS[id];
+  toast('🏆 成就解锁：'+a.icon+' '+a.name);
+  sfx('skill');
+}
+
+function renderHotbar(){
+  const bar = $('hotbar');
+  bar.innerHTML = '';
+  const n = slotCount();
+  bar.classList.toggle('compact', n > INV_SLOTS); // 超过 9 格用紧凑布局
+  for (let i=0;i<n;i++){
+    const slot = game ? game.inv[i] : null;
+    const btn = document.createElement('button');
+    btn.className = 'slot'+(i===selected?' sel':'');
+    const item = slot && slot.id ? ITEMS[slot.id] : null;
+    const kb = '<span class="kb">'+((i+1)%10)+'</span>';
+    if (item){
+      btn.innerHTML = kb+'<span>'+item.icon+'</span>';
+      if (item.form) btn.innerHTML += '<span class="nm">'+FORM_NAMES[item.form]+'</span>';
+      if (slot.n>1) btn.innerHTML += '<span class="cnt">×'+slot.n+'</span>';
+      btn.title = item.name;
+    } else {
+      btn.innerHTML = kb+'<span style="opacity:.35">·</span>';
+    }
+    btn.addEventListener('mousedown', e=>{ e.preventDefault(); selectSlot(i); });
+    bar.appendChild(btn);
+  }
+}
+function selectSlot(i){
+  selected = clamp(i, 0, slotCount()-1);
+  applyForm();
+  renderHotbar();
+}
+function cycleSlot(d){
+  if (!game) return;
+  const n = slotCount();
+  // 固定最多扫描全部格子，避免背包全空时死循环
+  for (let step=0; step<n; step++){
+    selected = (selected + d + n) % n;
+    const slot = game.inv[selected];
+    if (slot && slot.id) break;
+  }
+  applyForm();
+  renderHotbar();
+}
+
+/* ---------------- 变身形态 ---------------- */
+function formForItem(item){
+  if (!item) return 'ditto';
+  if (item.form) return item.form;
+  if (item.kind==='seed') return 'bulbasaur';
+  return 'ditto';
+}
+function applyForm(){
+  const slot = game && game.inv[selected];
+  const item = (slot && slot.id) ? ITEMS[slot.id] : null;
+  let form = formForItem(item);
+  // 手持无形态物品时，可以用 T 键切换已混熟学到的野生形态
+  if (form==='ditto' && game && game.wildForm && learnedWild(game.wildForm)) form = game.wildForm;
+  player.form = form;
+  updateFormHud();
+  if (typeof setPlayerForm3D === 'function') setPlayerForm3D(player.form);
+}
+function cycleWildForm(){
+  if (!game) return;
+  const pool = ['ditto'];
+  for (const id in WILD_POOL) if (learnedWild(id) && !pool.includes(id)) pool.push(id);
+  if (pool.length < 2){ toast('还没有混熟的野生宝可梦，多和它们聊天、喂食吧！'); return; }
+  const cur = game.wildForm && pool.includes(game.wildForm) ? game.wildForm : 'ditto';
+  game.wildForm = pool[(pool.indexOf(cur)+1) % pool.length];
+  applyForm();
+  toast('变身：'+(FORM_NAMES[game.wildForm]||'百变怪'));
+}
+
+/* ---------------- 对话框 ---------------- */
+function showDialog(html, actions){
+  dialog = {html, actions};
+  $('dlg-text').innerHTML = html;
+  const box = $('dlg-actions');
+  box.innerHTML = '';
+  for (const a of actions){
+    const b = document.createElement('button');
+    b.textContent = a.label;
+    if (a.gold) b.className='gold';
+    if (a.ghost) b.className='ghost';
+    b.addEventListener('click', a.fn);
+    box.appendChild(b);
+  }
+  $('dialog').classList.remove('hidden');
+}
+function closeDialog(){ dialog = null; $('dialog').classList.add('hidden'); }
+let msgQueue = [], msgDone = null;
+function showMsg(lines, onDone){ msgQueue = lines.slice(); msgDone = onDone||null; nextMsg(); }
+function nextMsg(){
+  if (!msgQueue.length){ closeDialog(); if (msgDone) msgDone(); return; }
+  const text = msgQueue.shift();
+  showDialog('<div style="font-size:17px;white-space:pre-wrap">'+text+'</div>', [{label:'继续 ▸', gold:true, fn:nextMsg}]);
+}
+function showConfirm(text, onYes){
+  showDialog('<div style="font-size:17px;white-space:pre-wrap;text-align:center">'+text+'</div>', [
+    {label:'确定', gold:true, fn:()=>{ closeDialog(); onYes(); }},
+    {label:'取消', ghost:true, fn:closeDialog},
+  ]);
+}
+
+/* ---------------- 商店（喵喵） ---------------- */
+function openShop(){ if (!inHouse) refreshShop(); }
+function refreshShop(){
+  if (!game) return;
+  let buyHtml = '', hasCropOffer = false;
+  for (const id in CROPS){
+    if (!CROPS[id].season.includes(game.season)) continue;
+    hasCropOffer = true;
+    const c = CROPS[id];
+    buyHtml += '<div class="shop-row"><span class="nm">🌱 '+c.name+'种</span><span class="pr">'+c.seed+'₽</span>'+
+      '<button data-buy="'+id+'">买 1</button><button data-buy5="'+id+'">买 5</button></div>';
+  }
+  if (!hasCropOffer) buyHtml = '<div style="opacity:.7;padding:6px">🍂 这个季节没有可种植的树果种子</div>';
+  buyHtml += '<div class="shop-row"><span class="nm">🥛 哞哞鲜乳(回体力)</span><span class="pr">100₽</span>'+
+    '<button data-buy="__salad">买 1</button><button data-buy5="__salad">买 5</button></div>';
+  if (!countItem('tool_rod'))
+    buyHtml += '<div class="shop-row"><span class="nm">🎣 可达鸭钓竿</span><span class="pr">250₽</span>'+
+      '<button data-buy="__rod">买 1</button></div>';
+
+  let sellHtml = '';
+  const sellable = {};
+  for (const s of game.inv){ if (s.id){ const it = ITEMS[s.id]; if (it && it.sell && s.n>0) sellable[s.id] = (sellable[s.id]||0)+s.n; } }
+  for (const id in sellable){
+    const it = ITEMS[id];
+    sellHtml += '<div class="shop-row"><span class="nm">'+it.icon+' '+it.name+'</span><span class="pr">×'+sellable[id]+' = '+ (it.sell*sellable[id])+'₽</span>'+
+      '<button data-sell="'+id+'">出售</button></div>';
+  }
+  if (!sellHtml) sellHtml = '<div style="opacity:.7;padding:6px">背包里没有可出售的物品</div>';
+
+  const upNames = {tool_hoe:'⛏ 地鼠锄', tool_can:'💧 车厘龟壶', tool_axe:'🗡 螳螂镰', tool_pick:'👊 拳石镐', tool_rod:'🎣 钓竿'};
+  let upHtml = '';
+  for (const tid in upNames){
+    // 还没买钓竿时不能升级钓竿
+    if (tid==='tool_rod' && !countItem('tool_rod')) continue;
+    const lv = (game.toolLevel && game.toolLevel[tid]) || 0;
+    if (lv>=2){
+      upHtml += '<div class="shop-row"><span class="nm">'+upNames[tid]+'</span><span class="pr">Lv.MAX</span><button disabled>已满</button></div>';
+    } else {
+      const w = 15*(lv+1), s = 8*(lv+1), g = lv===0 ? 200 : 500;
+      upHtml += '<div class="shop-row"><span class="nm">'+upNames[tid]+' Lv.'+lv+'→'+(lv+1)+'</span>'+
+        '<span class="pr">🪵'+w+' 🪨'+s+' '+g+'₽</span><button data-up="'+tid+'">升级</button></div>';
+    }
+  }
+
+  // 背包扩容
+  let bagHtml = '';
+  if ((game.bagLv||0) >= BAG_PRICES.length){
+    bagHtml = '<div class="shop-row"><span class="nm">🎒 背包 '+game.inv.length+' 格</span><span class="pr">已最大</span><button disabled>—</button></div>';
+  } else {
+    const bp = BAG_PRICES[game.bagLv||0];
+    bagHtml = '<div class="shop-row"><span class="nm">🎒 背包扩容 '+(game.inv.length)+'→'+(game.inv.length+3)+' 格</span>'+
+      '<span class="pr">'+bp+'₽</span><button data-bag="1">购买</button></div>';
+  }
+
+  // 技能研习（随成长解锁）
+  let skillHtml = '';
+  for (const id in SKILLS){
+    const s = SKILLS[id];
+    const nmHtml = '<span class="nm">'+s.name+'<br><small style="font-weight:400;opacity:.72">'+s.desc+'</small></span>';
+    if (hasSkill(id)){
+      skillHtml += '<div class="shop-row"><span class="nm">'+s.name+'</span><span class="pr">✅ 已习得</span><button disabled>—</button></div>';
+      continue;
+    }
+    if (s.req){
+      const [k2, n2, label] = s.req;
+      const cur = game.stats[k2]||0;
+      if (cur < n2){
+        skillHtml += '<div class="shop-row" style="opacity:.62">'+nmHtml+
+          '<span class="pr">🔒 '+label+'<br>'+cur+'/'+n2+'</span><button disabled>未解锁</button></div>';
+        continue;
+      }
+    }
+    skillHtml += '<div class="shop-row">'+nmHtml+'<span class="pr">'+s.cost+'₽</span><button data-skill="'+id+'">研习</button></div>';
+  }
+
+  showDialog(
+    '<h3>🐱 喵喵杂货摊</h3>'+
+    '<div style="text-align:center;margin-bottom:10px;font-size:15px">「喵哈哈，金币我最喜欢啦！」 余额：<b style="color:#b8860b">'+game.gold+'₽</b></div>'+
+    '<div class="shop-grid"><div><h4>🛒 购买树果种</h4>'+buyHtml+'</div>'+
+    '<div><h4>💰 出售</h4>'+sellHtml+'</div>'+
+    '<div><h4>⚒ 工具与背包</h4>'+upHtml+bagHtml+'</div>'+
+    '<div><h4>✨ 技能研习（随成长解锁）</h4>'+skillHtml+'</div></div>',
+    [{label:'关闭', gold:true, fn:closeDialog}]
+  );
+  $('dlg-box').querySelectorAll('[data-buy]').forEach(b=>{
+    b.addEventListener('click', e=>{ e.stopPropagation(); buyItem(b.dataset.buy, e.shiftKey?5:1); });
+  });
+  $('dlg-box').querySelectorAll('[data-buy5]').forEach(b=>{
+    b.addEventListener('click', e=>{ e.stopPropagation(); buyItem(b.dataset.buy5, 5); });
+  });
+  $('dlg-box').querySelectorAll('[data-sell]').forEach(b=>{
+    b.addEventListener('click', e=>{ e.stopPropagation(); sellItem(b.dataset.sell); });
+  });
+  $('dlg-box').querySelectorAll('[data-up]').forEach(b=>{
+    b.addEventListener('click', e=>{ e.stopPropagation(); upgradeTool(b.dataset.up); });
+  });
+  $('dlg-box').querySelectorAll('[data-bag]').forEach(b=>{
+    b.addEventListener('click', e=>{ e.stopPropagation(); buyBagUpgrade(); });
+  });
+  $('dlg-box').querySelectorAll('[data-skill]').forEach(b=>{
+    b.addEventListener('click', e=>{ e.stopPropagation(); buySkill(b.dataset.skill); });
+  });
+}
+function upgradeTool(toolId){
+  const lv = (game.toolLevel[toolId]||0);
+  if (lv>=2){ toast('已经是最高等级了'); return; }
+  const needW = 15*(lv+1), needS = 8*(lv+1), needG = lv===0 ? 200 : 500;
+  if (countItem('wood')<needW || countItem('stone')<needS){
+    toast('材料不足（需木材×'+needW+'、石头×'+needS+'）'); sfx('error'); return;
+  }
+  if (game.gold<needG){ toast('₽ 不够啦！'); sfx('error'); return; }
+  removeItem('wood', needW); removeItem('stone', needS); game.gold -= needG;
+  game.toolLevel[toolId] = lv+1;
+  sfx('coin');
+  toast(ITEMS[toolId].name+' 升级到 Lv.'+(lv+1)+'！使用体力降低');
+  updateHud(); renderHotbar(); refreshShop();
+}
+
+/* ---------------- 技能研习 & 背包扩容 ---------------- */
+function buySkill(id){
+  const s = SKILLS[id];
+  if (!s || !game || hasSkill(id)) return;
+  if (s.req){
+    const [k2, n2] = s.req;
+    if ((game.stats[k2]||0) < n2){ toast('还需要继续成长才能研习这个技能'); sfx('error'); return; }
+  }
+  if (game.gold < s.cost){ toast('₽ 不够啦！'); sfx('error'); return; }
+  game.gold -= s.cost;
+  game.skills.push(id);
+  sfx('skill');
+  toast('✨ 习得 '+s.name+'！');
+  if (id==='vigor') toast('💤 体力上限提升到 '+maxEnergy()+'！');
+  updateHud(); renderHotbar(); refreshShop();
+}
+function buyBagUpgrade(){
+  if (!game) return;
+  const lv = game.bagLv||0;
+  if (lv >= BAG_PRICES.length){ toast('背包已是最大容量'); return; }
+  const price = BAG_PRICES[lv];
+  if (game.gold < price){ toast('₽ 不够啦！'); sfx('error'); return; }
+  game.gold -= price;
+  game.bagLv = lv+1;
+  for (let i=0;i<3;i++) game.inv.push({id:null, n:0});
+  sfx('coin');
+  toast('🎒 背包扩容到 '+game.inv.length+' 格！');
+  updateHud(); renderHotbar(); refreshShop();
+}
+function buyItem(seedId, qty){
+  if (seedId==='__rod') qty = 1; // 钓竿是工具，只买单件
+  const price = seedId==='__salad' ? ITEMS.salad.buy : seedId==='__rod' ? ITEMS.tool_rod.buy : CROPS[seedId].seed;
+  const itemId = seedId==='__salad' ? 'salad' : seedId==='__rod' ? 'tool_rod' : 'seed_'+seedId;
+  const cost = price*qty;
+  if (game.gold < cost){ toast('₽ 不够啦！'); sfx('error'); return; }
+  if (addItem(itemId, qty) === false){ toast('背包已满！'); sfx('error'); return; }
+  game.gold -= cost;
+  sfx('coin');
+  toast('购买了 '+ITEMS[itemId].name+' ×'+qty);
+  updateHud(); renderHotbar(); refreshShop();
+}
+function sellItem(itemId){
+  const it = ITEMS[itemId];
+  if (!it || !it.sell) return;
+  let total = 0, sold = 0;
+  for (const s of game.inv){
+    if (s.id===itemId && s.n>0){ total += s.n*it.sell; sold += s.n; s.n = 0; s.id = null; }
+  }
+  if (!sold){ toast('没有可出售的物品'); return; }
+  game.gold += total;
+  game.stats.earned += total;
+  sfx('coin');
+  toast('出售 '+it.name+' ×'+sold+'，获得 '+total+'₽');
+  const shopW = playerWorld();
+  spawnFloater('+₽'+total, worldX(SHOP.x+1), worldZ(SHOP.y+1), '#ffd75e', 1.8);
+  markGuide('sell'); unlockAchv('first_sale');
+  if (game.stats.earned>=1000) unlockAchv('rich');
+  updateHud(); renderHotbar(); refreshShop();
+}
+
+/* ---------------- 物品 ---------------- */
+function addItem(id, n){
+  for (const s of game.inv) if (s.id===id){ s.n += n; return true; }
+  for (const s of game.inv) if (!s.id){ s.id=id; s.n=n; return true; }
+  return false;
+}
+function countItem(id){
+  let n = 0;
+  for (const s of game.inv) if (s.id===id) n += s.n;
+  return n;
+}
+function hasSkill(id){ return !!(game && game.skills && game.skills.includes(id)); }
+function learnedWild(id){ return !!(game && game.wild && game.wild[id] && game.wild[id].learned); }
+function maxEnergy(){ return MAX_ENERGY + (hasSkill('vigor') ? 25 : 0); }
+function slotCount(){ return INV_SLOTS + 3*((game && game.bagLv) || 0); }
+function initWildFriendship(){
+  if (!game) return;
+  if (!game.wild || typeof game.wild !== 'object') game.wild = {};
+  for (const id in WILD_POOL){
+    if (!game.wild[id] || typeof game.wild[id] !== 'object') game.wild[id] = {fp:0, learned:false};
+    game.wild[id].fp = clamp(parseInt(game.wild[id].fp,10)||0, 0, 100);
+    game.wild[id].learned = !!game.wild[id].learned;
+  }
+}
+/* 每天随机刷新野生宝可梦（1~2 只），位置避开建筑/耕地/水面 */
+function spawnWilds(){
+  if (!game) return;
+  game.wilds = [];
+  const count = 1 + (Math.random()<0.5 ? 1 : 0);
+  const ids = Object.keys(WILD_POOL);
+  for (let n=0; n<count; n++){
+    const id = ids[Math.floor(Math.random()*ids.length)];
+    for (let tries=0; tries<60; tries++){
+      const x = 3+Math.floor(Math.random()*(MAP_W-6));
+      const y = 3+Math.floor(Math.random()*(MAP_H-6));
+      const i = idx(x,y);
+      if (isSolid(x,y)) continue;
+      if (game.tile[i]!==T_GRASS) continue;
+      if (game.crops[i]) continue;
+      if (x>=HOUSE.x-2 && x<=HOUSE.x+HOUSE.w+1 && y>=HOUSE.y-2 && y<=HOUSE.y+HOUSE.h+2) continue;
+      if (x>=SHOP.x-2 && x<=SHOP.x+SHOP.w+1 && y>=SHOP.y-2 && y<=SHOP.y+SHOP.h+2) continue;
+      let near = false;
+      for (const w of game.wilds) if (Math.abs(w.x-x-0.5)<4 && Math.abs(w.y-y-0.5)<4) near = true;
+      for (const npc of game.npcs) if (Math.abs(npc.x-x-0.5)<2 && Math.abs(npc.y-y-0.5)<2) near = true;
+      if (near) continue;
+      game.wilds.push({id, x:x+0.5, y:y+0.5, target:null, wait:2+Math.random()*3, talked:false, fed:false});
+      break;
+    }
+  }
+}
+function addWildFriendship(id, amount){
+  const st = game.wild[id];
+  if (!st) return false;
+  if (st.learned) return false;
+  st.fp = clamp(st.fp + amount, 0, 100);
+  if (st.fp >= 100){
+    st.learned = true;
+    sfx('skill');
+    toast('✨ 与'+WILD_POOL[id].name+'成为挚友！百变怪学会了变身成它！');
+    unlockAchv('friend');
+    toast('获得被动「'+WILD_POOL[id].perk.split('：')[0]+'」：'+WILD_POOL[id].perk.split('：')[1]);
+  }
+  return true;
+}
+function removeItem(id, n){
+  for (const s of game.inv){
+    if (s.id===id){
+      const take = Math.min(s.n, n);
+      s.n -= take; n -= take;
+      if (s.n<=0){ s.id=null; s.n=0; }
+      if (!n) break;
+    }
+  }
+  return n===0;
+}
+function eatItem(id){
+  const it = ITEMS[id];
+  if (!it || !it.energy) return false;
+  game.energy = Math.min(maxEnergy(), game.energy + it.energy);
+  toast('吃了 '+it.name+'，体力 +'+it.energy);
+  sfx('eat');
+  return true;
+}
+
+/* ---------------- 行动 ---------------- */
+function playerTile(){ return [Math.floor(player.x), Math.floor(player.y)]; }
+function facingTile(){
+  const [px,py] = playerTile();
+  const d = DIRS[player.dir];
+  return [px+d[0], py+d[1]];
+}
+function tileIndexIn(tx,ty){ return inHouse ? idxI(tx,ty) : idx(tx,ty); }
+function tileAt(tx,ty){ return inHouse ? interior.tile[tileIndexIn(tx,ty)] : game.tile[tileIndexIn(tx,ty)]; }
+function decoAt(tx,ty){ return inHouse ? D_NONE : game.deco[tileIndexIn(tx,ty)]; }
+function cropAt(tx,ty){ return inHouse ? null : game.crops[tileIndexIn(tx,ty)]; }
+function wateredAt(tx,ty){ return inHouse ? 0 : game.watered[tileIndexIn(tx,ty)]; }
+
+function useSelected(){
+  if (fishing){ handleFishingInput(); return; }
+  const [tx,ty] = facingTile(); useOnTile(tx,ty);
+}
+function useOnTile(tx,ty){
+  if (!game || forceSleeping) return;
+  if (inHouse){ toast('屋内不能使用工具'); return; }
+  if (tx<0||ty<0||tx>=MAP_W||ty>=MAP_H) return;
+  const i = tileIndexIn(tx,ty);
+  const sel = game.inv[selected];
+  const item = sel && sel.id ? ITEMS[sel.id] : null;
+  const c = cropAt(tx,ty);
+
+  if (c && c.rem<=0 && (!item || item.kind!=='tool')){ harvest(tx,ty); return; }
+  if (!item) return;
+  const cost = (item.kind==='tool') ? toolCost(sel.id) : (item.kind==='seed' ? 1 : 0);
+
+  switch (sel.id){
+    case 'tool_hoe': {
+      if (tileAt(tx,ty)!==T_GRASS){ toast('这里不能开垦'); return; }
+      if (game.energy<cost){ toast('体力不足！'); sfx('error'); return; }
+      game.tile[i]=T_TILLED; game.deco[i]=D_NONE; game.energy-=cost;
+      triggerAction(); sfx('till'); updateTile3D(tx,ty); updateDeco3D(tx,ty);
+      spawnBurst(worldX(tx+0.5), 0.3, worldZ(ty+0.5), 0x8a6a44, 8, 0.4, 1.8);
+      markGuide('till'); unlockAchv('first_till');
+      break;
+    }
+    case 'tool_can': {
+      if (tileAt(tx,ty)!==T_TILLED){ toast('只能给开垦过的土地浇水'); return; }
+      // 求雨圈：一次浇灌 3×3
+      const waterTargets = [];
+      if (hasSkill('rainring')){
+        for (let dy=-1;dy<=1;dy++) for (let dx=-1;dx<=1;dx++){
+          const x2=tx+dx, y2=ty+dy;
+          if (x2<0||y2<0||x2>=MAP_W||y2>=MAP_H) continue;
+          const i2 = idx(x2,y2);
+          if (game.tile[i2]===T_TILLED && !game.watered[i2]) waterTargets.push([x2,y2]);
+        }
+      } else if (!wateredAt(tx,ty)) waterTargets.push([tx,ty]);
+      if (!waterTargets.length) return;
+      const canCost = Math.max(1, cost - (learnedWild('oddish')?1:0)); // 走路草「晨露」
+      if (game.energy<canCost){ toast('体力不足！'); sfx('error'); return; }
+      for (const [x2,y2] of waterTargets){
+        game.watered[idx(x2,y2)] = 1;
+        game.stats.watered++;
+        updateTile3D(x2,y2);
+        spawnBurst(worldX(x2+0.5), 0.35, worldZ(y2+0.5), 0x5ab8e8, 5, 0.3, 1.6);
+      }
+      game.energy -= canCost;
+      triggerAction(); sfx('water');
+      markGuide('water');
+      if (waterTargets.length>1) toast('💧 求雨圈浇灌了 '+waterTargets.length+' 格');
+      break;
+    }
+    case 'tool_axe': {
+      if (decoAt(tx,ty)!==D_TREE){ toast('这里没有树'); return; }
+      const axeCost = Math.max(1, cost - (hasSkill('cyclone')?1:0)); // 旋风刀省力
+      if (game.energy<axeCost){ toast('体力不足！'); sfx('error'); return; }
+      game.deco[i]=D_STUMP; game.energy-=axeCost; game.stats.chopped++;
+      const woodYield = (hasSkill('cyclone') ? 6 : 3) + (learnedWild('magnemite')?1:0); // 旋风刀/磁力
+      addItem('wood', woodYield); toast('获得 木材 ×'+woodYield);
+      triggerAction(); sfx('chop'); updateDeco3D(tx,ty);
+      spawnBurst(worldX(tx+0.5), 0.8, worldZ(ty+0.5), 0xb08a5a, 8, 0.5, 2.2);
+      break;
+    }
+    case 'tool_pick': {
+      if (decoAt(tx,ty)!==D_ROCK){ toast('这里没有石头'); return; }
+      const pickCost = Math.max(1, cost - (hasSkill('rockblast')?1:0)); // 岩崩省力
+      if (game.energy<pickCost){ toast('体力不足！'); sfx('error'); return; }
+      game.deco[i]=D_NONE; game.energy-=pickCost; game.stats.mined++;
+      const stoneYield = (hasSkill('rockblast') ? 4 : 2) + (learnedWild('magnemite')?1:0); // 岩崩/磁力
+      addItem('stone', stoneYield); toast('获得 石头 ×'+stoneYield);
+      triggerAction(); sfx('mine'); updateDeco3D(tx,ty);
+      spawnBurst(worldX(tx+0.5), 0.4, worldZ(ty+0.5), 0x9aa0a8, 8, 0.4, 2.0);
+      break;
+    }
+    case 'tool_rod': {
+      if (tileAt(tx,ty)!==T_WATER){ toast('要面向水面才能钓鱼'); return; }
+      if (game.energy<cost){ toast('体力不足！'); sfx('error'); return; }
+      game.energy-=cost;
+      const biteDelay = (1.2+Math.random()*2.6) * (hasSkill('angler')?0.55:1); // 悠闲垂钓：更快咬钩
+      fishing = {phase:'wait', t:0, biteAt:biteDelay, tx, ty};
+      triggerAction(); sfx('splash');
+      toast('甩竿！咬钩后快速按 空格/E 收竿');
+      break;
+    }
+    default: {
+      if (item.kind==='seed'){
+        if (c){ toast('这里已经种了东西'); return; }
+        if (tileAt(tx,ty)!==T_TILLED){ toast('请先开垦土地'); return; }
+        if (!CROPS[item.crop].season.includes(game.season)){ toast('这个季节无法种植！'); sfx('error'); return; }
+        if (sel.n<=0){ toast('没有种子了'); return; }
+        if (game.energy<cost){ toast('体力不足！'); sfx('error'); return; }
+        game.crops[i] = {type:item.crop, rem:CROPS[item.crop].days};
+        sel.n--; game.energy-=cost;
+        if (sel.n<=0){ sel.id=null; sel.n=0; }
+        triggerAction(); sfx('plant'); updateCrop3D(tx,ty);
+        spawnBurst(worldX(tx+0.5), 0.3, worldZ(ty+0.5), 0x6cbf3f, 6, 0.3, 1.8);
+        markGuide('plant');
+      } else if (item.kind==='crop' || item.kind==='food'){
+        const [px,py] = playerTile();
+        if (tx===px && ty===py){
+          if (eatItem(sel.id)){ sel.n--; if (sel.n<=0){ sel.id=null; sel.n=0; } }
+        } else toast('树果要收获后才能使用');
+      } else toast('这个物品不能使用');
+    }
+  }
+  updateHud(); renderHotbar();
+}
+function toolCost(toolId){
+  const base = toolId==='tool_hoe'?2 : toolId==='tool_can'?2 : toolId==='tool_axe'?4 : toolId==='tool_rod'?3 : 4;
+  const lv = (game && game.toolLevel && game.toolLevel[toolId]) || 0;
+  return Math.max(1, base - lv);
+}
+function harvest(tx,ty){
+  const c = cropAt(tx,ty);
+  if (!c || c.rem>0) return;
+  if (addItem('crop_'+c.type, 1) === false){ toast('背包已满！'); sfx('error'); return; }
+  game.crops[tileIndexIn(tx,ty)] = null;
+  game.stats.harvested++;
+  game.energy = Math.min(maxEnergy(), game.energy+1);
+  sfx('harvest'); updateCrop3D(tx,ty);
+  const def = CROPS[c.type];
+  spawnBurst(worldX(tx+0.5), 0.6, worldZ(ty+0.5), def.berry, 10, 0.35, 2.6);
+  spawnFloater('+1 '+def.icon+def.name, worldX(tx+0.5), worldZ(ty+0.5), '#ffe08a');
+  markGuide('harvest'); unlockAchv('first_harvest');
+  toast('收获 '+def.name+' ×1');
+  updateHud(); renderHotbar();
+}
+
+/* ---------------- 钓鱼 ---------------- */
+function handleFishingInput(){
+  if (!fishing) return;
+  if (fishing.phase==='bite') catchFish();
+  else { fishing = null; toast('收回了钓竿'); }
+}
+function catchFish(){
+  const r = Math.random();
+  const type = r<0.60 ? 'magikarp' : r<0.95 ? 'goldeen' : 'gyarados';
+  const id = 'fish_'+type;
+  fishing = null;
+  if (addItem(id,1)===false){ toast('背包满了，鱼又溜回水里…'); sfx('error'); return; }
+  game.stats.fished = (game.stats.fished||0)+1;
+  sfx(type==='gyarados' ? 'catch' : 'harvest');
+  unlockAchv('first_fish');
+  toast(type==='gyarados' ? '🌊💥 稀有！钓到了 暴鲤龙！！' : '钓到了 '+ITEMS[id].name+'！');
+  updateHud(); renderHotbar();
+}
+
+/* ---------------- 日光束技能（F 键） ---------------- */
+function useSunlight(){
+  if (!game || forceSleeping) return;
+  if (!hasSkill('sunlight')){ if (!menuOpen && !dialog) toast('还没有习得日光束（商店可研习）'); return; }
+  if (inHouse){ toast('屋内不能使用技能'); return; }
+  if (fishing){ toast('钓鱼中不能使用技能'); return; }
+  const [px,py] = playerTile();
+  let waterN = 0, growN = 0;
+  for (let dy=-2;dy<=2;dy++) for (let dx=-2;dx<=2;dx++){
+    const tx=px+dx, ty=py+dy;
+    if (tx<0||ty<0||tx>=MAP_W||ty>=MAP_H) continue;
+    const i2 = idx(tx,ty);
+    if (game.tile[i2]===T_TILLED && !game.watered[i2]){
+      game.watered[i2]=1; waterN++; game.stats.watered++;
+      updateTile3D(tx,ty);
+    }
+    const c = game.crops[i2];
+    if (c && c.rem>0){ c.rem--; growN++; updateCrop3D(tx,ty); }
+  }
+  if (!waterN && !growN){ toast('周围没有可作用的耕地或作物'); return; }
+  if (game.energy < 20){ toast('体力不足！（需要 20）'); sfx('error'); return; }
+  game.energy -= 20;
+  triggerAction(); sfx('plant'); sfx('water');
+  spawnSunParticles();
+  toast('🌱 日光束！浇灌 '+waterN+' 格 · 催熟 '+growN+' 株');
+  updateHud();
+}
+function spawnSunParticles(){
+  if (!px2) return;
+  const src = playerWorld();
+  for (let i=0;i<14;i++){
+    particles.push({
+      x:(src.x+MAP_W/2+(Math.random()-0.5)*2.6)*16, y:(src.z+MAP_H/2+(Math.random()-0.5)*2.6)*16,
+      vx:(Math.random()-0.5)*20, vy:-50-Math.random()*30, vz:0, ttl:0.7, age:0, color:'#a8e858'});
+  }
+}
+
+/* ---------------- 互动 ---------------- */
+function interact(){
+  if (fishing){ handleFishingInput(); return; }
+  interactAt(...facingTile());
+}
+function interactAt(tx,ty){
+  if (!game || forceSleeping) return;
+  if (inHouse){
+    for (const [bx,by] of BED_TILES) if (bx===tx&&by===ty){ showConfirm('要睡觉休息吗？（结束今天，进入下一天）', ()=>sleep(false)); return; }
+    if (tx===INT_DOOR[0] && ty===INT_DOOR[1]){ exitHouse(); return; }
+    toast('这里没什么特别的');
+    return;
+  }
+  if (tx>=SHOP.x&&tx<SHOP.x+SHOP.w&&ty>=SHOP.y&&ty<SHOP.y+SHOP.h){ openShop(); return; }
+  const npc = npcAt(tx,ty);
+  if (npc){ talk(npc); return; }
+  const wild = wildAt(tx,ty);
+  if (wild){ talkWild(wild); return; }
+  if (tx===HOUSE.doorX && ty===HOUSE.doorY){ enterHouse(); return; }
+  const c = cropAt(tx,ty);
+  if (c && c.rem<=0){ harvest(tx,ty); return; }
+  // 野怪/常驻 NPC 不阻挡移动，玩家可能恰好站在它们格子上——脚下也能互动
+  const [px,py] = playerTile();
+  const wildHere = wildAt(px,py);
+  if (wildHere){ talkWild(wildHere); return; }
+  const npcHere = npcAt(px,py);
+  if (npcHere){ talk(npcHere); return; }
+  toast('这里没什么可互动的');
+}
+function npcAt(tx,ty){
+  if (inHouse) return null;
+  for (const n of game.npcs){
+    if (Math.floor(n.x)===tx && Math.floor(n.y)===ty) return n;
+  }
+  return null;
+}
+function talk(npc){
+  const line = game.npcLine%2===0 ? npc.line : npc.line2;
+  game.npcLine++;
+  showMsg(['【'+npc.name+'】', line]);
+}
+
+/* ---------------- 野生宝可梦互动（混熟 → 学变身） ---------------- */
+function wildAt(tx,ty){
+  if (inHouse || !game) return null;
+  for (const w of game.wilds||[]){
+    if (Math.floor(w.x)===tx && Math.floor(w.y)===ty) return w;
+  }
+  return null;
+}
+function talkWild(w){
+  const info = WILD_POOL[w.id];
+  const st = game.wild[w.id];
+  const tier = st.learned ? 3 : st.fp>=70 ? 2 : st.fp>=30 ? 1 : 0;
+  const tierName = ['陌生','熟悉','亲密','挚友'][tier];
+  let bar = '';
+  for (let i=0;i<10;i++) bar += (i < Math.floor(st.fp/10) ? '█' : '░');
+  const sel = game.inv[selected];
+  const selItem = sel && sel.id ? ITEMS[sel.id] : null;
+  const canFeed = selItem && (selItem.kind==='crop' || selItem.kind==='food');
+
+  let html = '<h3>🌿 野生 '+info.name+'</h3>'+
+    '<div style="text-align:center;margin-bottom:8px">好感 '+st.fp+'/100 <span style="letter-spacing:1px;color:#b8860b">'+bar+'</span> · '+tierName+
+    (st.learned ? ' · ✅ 已学会变身' : '')+'</div>'+
+    '<div style="text-align:center;font-size:15px">「'+info.lines[tier]+'」</div>'+
+    '<div style="text-align:center;font-size:13px;color:#8a5a10;margin-top:8px">混熟后百变怪可以变身成它，获得：'+info.perk+'</div>';
+  const actions = [];
+  if (!st.learned){
+    actions.push({label: w.talked ? '今天聊过了' : '聊聊天 (+5)', fn: ()=>{
+      w.talked = true;
+      addWildFriendship(w.id, 5);
+      talkWild(w);
+    }});
+    if (canFeed){
+      actions.push({label: '喂食 '+selItem.icon+selItem.name+' (+15)', gold:true, fn: ()=>{
+        sel.n--; if (sel.n<=0){ sel.id=null; sel.n=0; }
+        w.fed = true;
+        addWildFriendship(w.id, 15);
+        renderHotbar();
+        talkWild(w);
+      }});
+    } else {
+      actions.push({label: '喂食（选中树果/鱼/食物）', ghost:true, fn:()=>{ toast('先在快捷栏选中树果或食物'); talkWild(w); }});
+    }
+  } else {
+    actions.push({label: '一起玩', fn:()=>{ talkWild(w); }});
+  }
+  actions.push({label:'再见', ghost:true, fn:closeDialog});
+  showDialog(html, actions);
+}
+function enterHouse(){
+  inHouse = true;
+  player.x = INT_DOOR[0]+0.5; player.y = INT_DOOR[1]-0.5;
+  player.dir = 1; player.moving = false; player.mx=player.x; player.my=player.y;
+  applyWorldVisibility(); updateHud(); updateFx(); snapCamera();
+}
+function exitHouse(){
+  inHouse = false;
+  player.x = HOUSE.doorX+0.5; player.y = HOUSE.doorY+1.5;
+  player.dir = 0; player.moving = false; player.mx=player.x; player.my=player.y;
+  applyWorldVisibility(); updateHud(); updateFx(); snapCamera();
+}
+
+/* ---------------- 睡觉 / 过天 ---------------- */
+function sleep(passedOut){
+  fishing = null;
+  forceSleeping = true;
+  const fadeEl = $('fade');
+  if (fadeEl) fadeEl.classList.add('on'); // 黑屏遮住过天瞬间
+  advanceDay(passedOut);
+  forceSleeping = false;
+  if (inHouse) exitHouse();
+  if (fadeEl) setTimeout(()=>fadeEl.classList.remove('on'), 550); // 停顿一拍再"醒来"
+  toast(passedOut ? '😵 体力耗尽，你晕倒了…' : '🌙 睡得真香！新的一天开始了');
+  toast(SEASON_NAMES[game.season]+' 第'+game.day+'天 · '+WEATHER_ICONS[game.weather]+WEATHER_NAMES[game.weather]);
+  updateHud();
+}
+function rollWeather(season){ if (season==='winter') return 'snow'; return Math.random()<0.75 ? 'sunny' : 'rain'; }
+function advanceDay(passedOut){
+  const rainToday = game.weather==='rain';
+  for (let i=0;i<game.crops.length;i++){
+    const c = game.crops[i];
+    if (c && (game.watered[i] || rainToday)) c.rem = Math.max(0, c.rem-1);
+  }
+  game.day++;
+  if (game.day > DAYS_PER_SEASON){
+    game.day = 1;
+    const si = SEASON_ORDER.indexOf(game.season);
+      game.season = SEASON_ORDER[(si+1)%4];
+      let withered = 0;
+      for (let i=0;i<game.crops.length;i++){
+        const c2 = game.crops[i];
+        if (c2 && !CROPS[c2.type].season.includes(game.season)){ game.crops[i]=null; withered++; }
+      }
+      if (withered) toast('🍂 换季了，'+withered+' 株不合季节的树果枯萎了');
+  }
+  game.weather = rollWeather(game.season);
+  game.watered.fill(0);
+  if (game.weather==='rain'){ for (let i=0;i<game.tile.length;i++) if (game.tile[i]===T_TILLED) game.watered[i]=1; }
+  regrow();
+  spawnWilds();   // 野生宝可梦每天重新出没（好感度保留）
+  game.energy = passedOut ? Math.floor(maxEnergy()*0.6) : maxEnergy();
+  game.time = 6*60;
+  game.stats.daysPlayed++;
+  markGuide('sleep');
+  if (game.stats.daysPlayed>=112) unlockAchv('four_seasons');
+  saveGame();
+  refreshWorld3D();
+  rebuildWilds3D();
+}
+function regrow(){
+  const R = Math.random;
+  const trySpawn = (kind)=>{
+    let x,y,i,guard=0;
+    do {
+      x = 3+Math.floor(R()*(MAP_W-6)); y = 3+Math.floor(R()*(MAP_H-6)); i = idx(x,y); guard++;
+      if (guard>200) return;
+    } while (game.tile[i]!==T_GRASS || game.deco[i]!==D_NONE ||
+             (x>=HOUSE.x-1&&x<=HOUSE.x+HOUSE.w&&y>=HOUSE.y-1&&y<=HOUSE.y+HOUSE.h) ||
+             (x>=SHOP.x-1&&x<=SHOP.x+SHOP.w&&y>=SHOP.y-1&&y<=SHOP.y+SHOP.h));
+    game.deco[i] = kind;
+    updateDeco3D(x,y);
+  };
+  for (let n=0;n<2;n++) if (R()<0.5) trySpawn(D_TREE);
+  for (let n=0;n<1;n++) if (R()<0.5) trySpawn(D_ROCK);
+}
+
+/* ---------------- 菜单 ---------------- */
+function openMenu(){ menuOpen = true; fishing = null; hideTip(); $('menu').classList.remove('hidden'); updateMenuSound(); }
+function closeMenu(){ menuOpen = false; $('menu').classList.add('hidden'); $('menu-sub').innerHTML=''; }
+function updateMenuSound(){ $('menu').querySelector('[data-act="sound"]').textContent = (soundOn?'🔊 声音：开':'🔇 声音：关'); }
+function showSub(html){ $('menu-sub').innerHTML = html; }
+$('menu').querySelectorAll('button').forEach(b=>{
+  b.addEventListener('click', ()=>{
+    const act = b.dataset.act;
+    if (act==='continue') closeMenu();
+    else if (act==='save'){ saveGame(); toast('💾 存档成功'); }
+    else if (act==='load'){ closeMenu(); if (loadGame()) toast('📂 读取存档成功'); else toast('没有找到存档'); }
+    else if (act==='export'){ closeMenu(); exportSave(); }
+    else if (act==='import'){ closeMenu(); importSave(); }
+    else if (act==='new'){ closeMenu(); showConfirm('确定要开始新游戏吗？当前进度会被覆盖。', ()=>{ newGame(); saveGame(); toast('🌱 新的农庄生活开始了！'); }); }
+    else if (act==='sound'){ soundOn = !soundOn; updateMenuSound(); if (soundOn) sfx('coin'); }
+    else if (act==='help'){
+      showSub('<b>🎮 操作</b><br>WASD / 方向键 — 移动<br>空格 / 鼠标左键 — 使用选中物品<br>E / 鼠标右键 — 互动（进门/睡觉/对话/商店/收获）<br>1~9 / 滚轮 — 选快捷栏；Q / R 循环<br>Esc — 菜单<br><br><b>🔄 百变怪的变身</b><br>· 选中不同工具，百变怪会变身：<br>&nbsp;&nbsp;⛏ 地鼠锄 → 地鼠（开垦）<br>&nbsp;&nbsp;💧 车厘龟壶 → 车厘龟（浇水）<br>&nbsp;&nbsp;🗡 螳螂镰 → 飞天螳螂（砍树）<br>&nbsp;&nbsp;👊 拳石镐 → 小拳石（敲石头）<br>&nbsp;&nbsp;🌱 种子 → 妙蛙种子（种植）<br>&nbsp;&nbsp;🎣 钓竿 → 可达鸭（钓鱼）<br><br><b>🌾 玩法</b><br>· 开垦草地 → 种树果 → 浇水 → 睡觉后生长<br>· 雨天自动浇水；冬季可种雪绒果<br>· 收获树果卖给喵喵杂货摊换 ₽<br>· 池塘边钓鱼：甩竿后等「咬钩」，快速按 空格 收竿<br>· 砍树/敲石得的木材、石头可在商店升级工具（省体力）<br><br><b>✨ 技能研习（商店·随成长解锁）</b><br>· ⚡ 电光一闪：按住 Shift 冲刺移动<br>· 💧 求雨圈：浇水范围 3×3<br>· 🌪 旋风刀 / 🪨 岩崩：砍伐/开采产出翻倍且省体力<br>· 🎣 悠闲垂钓：鱼更快咬钩、更难逃脱<br>· 💤 卡比兽之力：体力上限 +25<br>· 🌱 日光束：按 F 浇灌并催熟周围 5×5 作物<br>· 🎒 背包扩容：金币购买，最多 18 格（第 10 格起用滚轮/点击选择）<br><br><b>🌿 野生宝可梦</b><br>· 每天有野生 波波/小磁怪/走路草 出没在草地上<br>· 按 E 互动：聊天 +5、喂食树果/鱼 +15（每天各一次）<br>· 好感 100 成为挚友：百变怪学会变身成它（按 T 切换）并获得被动<br>&nbsp;&nbsp;波波「顺风」移速+25% · 小磁怪「磁力」伐木采石+1 · 走路草「晨露」浇水省体力');
+    }
+    else if (act==='stats'){
+      const s = game ? game.stats : {earned:0,harvested:0,chopped:0,mined:0,daysPlayed:0,watered:0,fished:0};
+      showSub('<b>📊 农庄统计</b><br>游玩天数：'+s.daysPlayed+' 天<br>累计收入：'+s.earned+'₽<br>收获树果：'+s.harvested+' 个<br>浇灌次数：'+s.watered+' 次<br>砍伐树木：'+s.chopped+' 棵<br>开采石头：'+s.mined+' 块<br>钓鱼次数：'+(s.fished||0)+' 次<br>'+(game?('当前季节：'+SEASON_NAMES[game.season]+' 第'+game.day+'天'):''));
+    }
+  });
+});
+
+/* ---------------- 音效 ---------------- */
+/* ---- 产品级音频：分层合成音效 + 环境音（鸟鸣/蟋蟀/雨声），纯 WebAudio 无素材 ---- */
+const AudioFX = {
+  ctx:null, master:null, noiseBuf:null, rainSrc:null, rainGain:null, ambTimer:null, lastStep:0,
+  ensure(){
+    if (this.ctx) { if (this.ctx.state==='suspended') this.ctx.resume(); return true; }
+    try{
+      this.ctx = new (window.AudioContext||window.webkitAudioContext)();
+      this.master = this.ctx.createGain();
+      this.master.gain.value = 0.5;
+      this.master.connect(this.ctx.destination);
+      // 共享白噪声缓冲（1 秒），打击乐与雨声共用
+      const len = this.ctx.sampleRate;
+      this.noiseBuf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
+      const d = this.noiseBuf.getChannelData(0);
+      for (let i=0;i<len;i++) d[i] = Math.random()*2-1;
+      return true;
+    }catch(e){ return false; }
+  },
+  tone(f, f2, dur, type, vol, delay){
+    const c = this.ctx, t = c.currentTime + (delay||0);
+    const o = c.createOscillator(), g = c.createGain();
+    o.type = type||'sine';
+    o.frequency.setValueAtTime(f, t);
+    o.frequency.exponentialRampToValueAtTime(Math.max(40,f2||f), t+dur);
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t+dur);
+    o.connect(g); g.connect(this.master);
+    o.start(t); o.stop(t+dur+0.02);
+  },
+  noise(dur, vol, filterType, filterF, filterF2, delay){
+    const c = this.ctx, t = c.currentTime + (delay||0);
+    const s = c.createBufferSource(); s.buffer = this.noiseBuf; s.loop = true;
+    const f = c.createBiquadFilter(); f.type = filterType||'lowpass';
+    f.frequency.setValueAtTime(filterF||800, t);
+    if (filterF2) f.frequency.exponentialRampToValueAtTime(filterF2, t+dur);
+    const g = c.createGain();
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t+dur);
+    s.connect(f); f.connect(g); g.connect(this.master);
+    s.start(t); s.stop(t+dur+0.05);
+  },
+  arp(freqs, step, dur, type, vol){
+    freqs.forEach((f,i)=> this.tone(f, f, dur, type, vol, i*step));
+  },
+};
+function sfx(kind){
+  if (!soundOn) return;
+  if (!AudioFX.ensure()) return;
+  const A = AudioFX;
+  try{
+    switch(kind){
+      case 'till': A.noise(.1,.14,'lowpass',420,140); A.tone(130,80,.09,'triangle',.06); break;
+      case 'chop': A.noise(.06,.16,'bandpass',260); A.tone(180,120,.07,'square',.05); break;
+      case 'mine': A.noise(.05,.12,'highpass',1800); A.tone(900,500,.06,'square',.05); break;
+      case 'water': A.noise(.28,.09,'lowpass',1200,280); A.tone(500,200,.16,'sine',.05); break;
+      case 'splash': A.noise(.32,.12,'lowpass',900,220); break;
+      case 'plant': A.tone(440,660,.08,'sine',.09); break;
+      case 'harvest': A.arp([660,880,1320],.06,.12,'sine',.09); break;
+      case 'coin': A.tone(880,880,.06,'triangle',.09); A.tone(1320,1320,.12,'triangle',.07,.05); break;
+      case 'eat': A.tone(400,300,.1,'sine',.08); A.noise(.06,.04,'lowpass',600); break;
+      case 'error': A.tone(160,120,.18,'sawtooth',.07); break;
+      case 'sleep': A.tone(320,180,.5,'sine',.08); break;
+      case 'catch': A.arp([520,780,1170,1560],.05,.14,'sine',.09); break;
+      case 'skill': A.arp([523,659,784,1046],.07,.18,'triangle',.08); break;
+      case 'ui': A.tone(700,900,.045,'triangle',.045); break;
+      case 'step': A.noise(.04,.028,'lowpass',300); break;
+      default: A.tone(300,200,.1,'sine',.06);
+    }
+  }catch(e){}
+}
+/* 环境音调度：白天鸟鸣 / 夜晚蟋蟀 / 雨声循环，每 700ms 检查一次 */
+function startAmbientAudio(){
+  if (AudioFX.ambTimer) return;
+  AudioFX.ambTimer = setInterval(()=>{
+    if (!soundOn || !game || !AudioFX.ensure()) { if (AudioFX.rainGain) setRainAmbient(false); return; }
+    const raining = game.weather==='rain' && !inHouse;
+    setRainAmbient(raining);
+    if (inHouse || raining) return; // 室内/雨声中不放鸟虫鸣
+    const night = game.time>=1170 || game.time<330;
+    const r = Math.random();
+    if (night){
+      if (r<0.55){ // 蟋蟀：高频短脉冲串
+        const base = 3800+Math.random()*500;
+        for (let i=0;i<3;i++) AudioFX.tone(base, base, .04, 'sine', .014, i*.09);
+      }
+    } else {
+      if (r<0.4){ // 鸟鸣：2~4 个快速上行啁啾
+        const f0 = 2200+Math.random()*900, n = 2+Math.floor(Math.random()*3);
+        for (let i=0;i<n;i++) AudioFX.tone(f0*(1+i*0.12), f0*(1.25+i*0.12), .07, 'sine', .018, i*.1);
+      }
+    }
+  }, 700);
+}
+function setRainAmbient(on){
+  if (on && !AudioFX.rainSrc && AudioFX.ctx){
+    const s = AudioFX.ctx.createBufferSource(); s.buffer = AudioFX.noiseBuf; s.loop = true;
+    const f = AudioFX.ctx.createBiquadFilter(); f.type='lowpass'; f.frequency.value = 900;
+    const g = AudioFX.ctx.createGain(); g.gain.value = 0;
+    s.connect(f); f.connect(g); g.connect(AudioFX.master);
+    g.gain.linearRampToValueAtTime(0.05, AudioFX.ctx.currentTime+1.2); // 淡入
+    s.start();
+    AudioFX.rainSrc = s; AudioFX.rainGain = g;
+  } else if (!on && AudioFX.rainSrc){
+    try{
+      const g = AudioFX.rainGain, s = AudioFX.rainSrc;
+      g.gain.linearRampToValueAtTime(0, AudioFX.ctx.currentTime+0.8);
+      setTimeout(()=>{ try{ s.stop(); }catch(e){} }, 900); // 淡出后停止
+    }catch(e){}
+    AudioFX.rainSrc = null; AudioFX.rainGain = null;
+  }
+}
+
+/* =====================================================================
+   Three.js 2.5D 渲染层
+   ===================================================================== */
+let renderer=null, scene=null, camera=null, raycaster=null;
+let farmGroup=null, interiorGroup=null, groundGroup=null, entityGroup=null, decoGroup=null, cropGroup=null;
+let playerMesh = null, npcMeshes = [], meowthMesh = null;
+let playerGroup = null, groundMesh = null, interiorGround = null, groundColor = null;
+let shadowMat = null;
+const cropMeshes = new Map(), treeMeshes = new Map(), rockMeshes = new Map(), plantMeshes = new Map();
+let actionAnim = null, particles = [], waterT = 0;
+let tileHighlight = null, biteMark = null, bobber = null;
+let ambientGroup = null, ambientKind = 'none', ambientParts = [];
+let GEO = null;
+
+/* ---- 相机（2.5D 正交 + 边缘跟随） ---- */
+const ASPECT = VIEW_W/VIEW_H;
+const CAM_H = 10.5;             // 半屏高度（世界单位 ≈ 可见纵向格数的一半）
+const CAM_OFF = {y:26, z:20};   // 相机相对注视点的偏移（决定俯视角）
+const DEAD_X = 8, DEAD_Z = 6;   // 跟随死区（玩家可偏离中心的格数）
+const CLAMP_X = 8, CLAMP_Z = 5; // 相机中心夹取范围（保证视野不出农场）
+let camTarget = {x:0, z:0};
+
+const matCache = new Map();
+function mat(color, o){
+  // 粒子等需要独立淡入淡出的材质不缓存；其余静态材质全部复用，避免反复创建/销毁
+  if (o && o.dynamic) return makeMat(color, o);
+  const key = color + '|' + (o && o.transparent ? 't' : 'o') + '|' + (o && o.opacity);
+  let m = matCache.get(key);
+  if (!m){ m = makeMat(color, o); matCache.set(key, m); }
+  return m;
+}
+function makeMat(color, o){
+  const m = new THREE.MeshLambertMaterial({color});
+  if (o && o.transparent){ m.transparent = true; m.opacity = (o.opacity!=null?o.opacity:0.6); }
+  return m;
+}
+function part(parent, geoName, color, x,y,z, opts){
+  opts = opts||{};
+  const m = new THREE.Mesh(GEO[geoName], mat(color, opts));
+  m.position.set(x,y,z);
+  if (opts.sx||opts.sy||opts.sz) m.scale.set(opts.sx||1, opts.sy||1, opts.sz||1);
+  if (opts.rx) m.rotation.x = opts.rx;
+  if (opts.ry) m.rotation.y = opts.ry;
+  if (opts.rz) m.rotation.z = opts.rz;
+  parent.add(m);
+  return m;
+}
+
+function init3D(){
+  renderer = new THREE.WebGLRenderer({antialias:true, canvas, powerPreference:'high-performance'});
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, 2));
+  renderer.setSize(VIEW_W, VIEW_H, false);
+  renderer.domElement.style.width = '100%';
+  renderer.domElement.style.height = '100%';
+  renderer.setClearColor(0x7ec8f0);
+  scene = new THREE.Scene();
+  scene.fog = new THREE.Fog(0x7ec8f0, 55, 150);
+  camera = new THREE.OrthographicCamera(-CAM_H*ASPECT, CAM_H*ASPECT, CAM_H, -CAM_H, 0.1, 300);
+  camera.position.set(0, CAM_OFF.y, CAM_OFF.z);
+  camera.lookAt(0, 0, 0);
+  raycaster = new THREE.Raycaster();
+
+  // 总亮度压在 ≈1.0 附近：之前的 0.85+0.95 会让朝上表面过曝发白
+  const amb = new THREE.AmbientLight(0xffffff, 0.72);
+  scene.add(amb);
+  const dir = new THREE.DirectionalLight(0xffffff, 0.5);
+  dir.position.set(25, 45, 18);
+  scene.add(dir);
+
+  GEO = {
+    sphere: new THREE.SphereGeometry(1, 16, 13),
+    box: new THREE.BoxGeometry(1,1,1),
+    cone: new THREE.ConeGeometry(0.62, 1, 12),
+    cyl: new THREE.CylinderGeometry(0.32, 0.32, 1, 10),
+    torus: new THREE.TorusGeometry(0.22, 0.09, 8, 16),
+    ico: new THREE.IcosahedronGeometry(1, 0),
+    dod: new THREE.DodecahedronGeometry(1, 0),
+    disc: new THREE.CylinderGeometry(0.26, 0.26, 0.05, 16),
+    plane: new THREE.PlaneGeometry(1,1),
+  };
+  shadowMat = new THREE.MeshBasicMaterial({color:0x1a1a1a, transparent:true, opacity:0.22, depthWrite:false});
+
+  farmGroup = new THREE.Group();
+  interiorGroup = new THREE.Group();
+  groundGroup = new THREE.Group();
+  decoGroup = new THREE.Group();
+  cropGroup = new THREE.Group();
+  entityGroup = new THREE.Group();
+  playerGroup = new THREE.Group();
+  scene.add(farmGroup);
+  farmGroup.add(groundGroup, decoGroup, cropGroup, entityGroup);
+  scene.add(interiorGroup);
+  scene.add(playerGroup); // 玩家独立于农场/室内分组，保证进出房屋都可见
+
+  // 目标格高亮框
+  tileHighlight = new THREE.Mesh(GEO.plane, new THREE.MeshBasicMaterial({color:0xffd75e, transparent:true, opacity:0.3, depthWrite:false}));
+  tileHighlight.rotation.x = -Math.PI/2;
+  tileHighlight.scale.set(0.94, 0.94, 1);
+  tileHighlight.position.y = 0.02;
+  tileHighlight.visible = false;
+  scene.add(tileHighlight);
+
+  // 咬钩感叹号
+  biteMark = new THREE.Group();
+  part(biteMark,'box',0xe04030, 0, 0.22, 0, {sx:0.14, sy:0.34, sz:0.14});
+  part(biteMark,'sphere',0xe04030, 0, -0.06, 0, {sx:0.09, sy:0.09, sz:0.09});
+  biteMark.visible = false;
+  scene.add(biteMark);
+
+  // 钓鱼浮漂
+  bobber = new THREE.Group();
+  part(bobber,'sphere',0xe04030, 0, 0.09, 0, {sx:0.12, sy:0.12, sz:0.12});
+  part(bobber,'sphere',0xf5f0e0, 0, 0.02, 0, {sx:0.1, sy:0.07, sz:0.1});
+  bobber.visible = false;
+  scene.add(bobber);
+
+  // 季节/夜晚氛围粒子
+  ambientGroup = new THREE.Group();
+  scene.add(ambientGroup);
+
+  buildGround();
+  buildBuildings();
+  buildInterior();
+  buildEntities();
+  refreshWorld3D();
+  snapCamera();
+}
+
+/* ---- 地面瓦片（InstancedMesh 合并为 1 个 draw call） ---- */
+function buildGround(){
+  const count = MAP_W*MAP_H;
+  groundMesh = new THREE.InstancedMesh(GEO.plane, mat(0xffffff), count);
+  groundMesh.frustumCulled = false; // 实例遍布整张地图，避免包围盒误裁剪
+  const dummy = new THREE.Object3D();
+  dummy.rotation.x = -Math.PI/2;
+  for (let y=0;y<MAP_H;y++) for (let x=0;x<MAP_W;x++){
+    dummy.position.set(worldX(x+0.5), 0, worldZ(y+0.5));
+    dummy.updateMatrix();
+    groundMesh.setMatrixAt(idx(x,y), dummy.matrix);
+  }
+  groundMesh.instanceMatrix.needsUpdate = true;
+  groundGroup.add(groundMesh);
+}
+function setTileColor(tx,ty,hex){
+  if (!groundMesh) return;
+  if (!groundColor) groundColor = new THREE.Color();
+  groundColor.set(hex);
+  groundMesh.setColorAt(idx(tx,ty), groundColor);
+}
+function commitGroundColors(){
+  if (groundMesh && groundMesh.instanceColor) groundMesh.instanceColor.needsUpdate = true;
+}
+function groundTileBase(x,y){
+  const i = idx(x,y), t = game.tile[i];
+  if (t===T_WATER){
+    // 与陆地相邻的格子用浅水色，形成岸线过渡
+    const shore = [[1,0],[-1,0],[0,1],[0,-1]].some(([dx,dy]) => {
+      const nx=x+dx, ny=y+dy;
+      return nx<0||ny<0||nx>=MAP_W||ny>=MAP_H || game.tile[idx(nx,ny)]!==T_WATER;
+    });
+    if (shore) return '#8fc3de';
+    return ((x+y)%2===0) ? '#4e83c4' : '#4577b6';
+  }
+  if (t===T_TILLED) return game.watered[i] ? '#7a5a30' : '#96663a';
+  if (t===T_PATH) return ((x+y)%2===0) ? '#c9a86a' : '#bf9d60';
+  const base = ((x+y)%2===0) ? SEASON_COLORS[game.season] : SEASON_GRASS2[game.season];
+  return (game.season==='winter' && ((x*3+y*5)%7===0)) ? '#e8eef4' : base;
+}
+function refreshGroundColors(){
+  if (!game) return;
+  for (let y=0;y<MAP_H;y++) for (let x=0;x<MAP_W;x++){
+    setTileColor(x,y, shadeColor(groundTileBase(x,y), game.shade[idx(x,y)]));
+  }
+  commitGroundColors();
+}
+function updateTile3D(tx,ty){
+  if (!game || !groundMesh) return;
+  setTileColor(tx,ty, shadeColor(groundTileBase(tx,ty), game.shade[idx(tx,ty)]));
+  commitGroundColors();
+}
+
+/* ---- 建筑 ---- */
+function buildBuildings(){
+  // 房屋（米墙 + 双坡屋顶 + 门 + 窗棂 + 烟囱）
+  const h = new THREE.Group();
+  const hx = worldX(HOUSE.x), hz = worldZ(HOUSE.y), hw = HOUSE.w, hh = HOUSE.h;
+  const cx = hx+hw/2, cz = hz+hh/2;
+  part(h,'box',0x8a5a2b, cx, 0.06, cz, {sx:hw+0.5, sy:0.12, sz:hh+0.5});   // 地基
+  part(h,'box',0xe8d9b8, cx, 0.55, cz, {sx:hw, sy:1.1, sz:hh});            // 墙体
+  const roofN = part(h,'box',0xa04830, cx, 1.52, cz-0.98, {sx:hw+0.7, sy:0.14, sz:2.2});
+  roofN.rotation.x = -0.36;
+  const roofS = part(h,'box',0x8a4030, cx, 1.52, cz+0.98, {sx:hw+0.7, sy:0.14, sz:2.2});
+  roofS.rotation.x = 0.36;
+  part(h,'box',0x6a3226, cx, 1.9, cz, {sx:hw+0.7, sy:0.14, sz:0.26});      // 屋脊
+  part(h,'box',0x8a5a48, cx+1.6, 1.9, cz-1.0, {sx:0.4, sy:0.9, sz:0.4});   // 烟囱
+  part(h,'box',0x5a3a30, cx+1.6, 2.36, cz-1.0, {sx:0.48, sy:0.1, sz:0.48});
+  // 门（南墙正中偏 doorX）+ 门框 + 门把
+  const dxw = HOUSE.doorX-HOUSE.x+0.5;
+  part(h,'box',0x6a4a2c, dxw, 0.5, hz+hh+0.01, {sx:0.68, sy:1.0, sz:0.08});
+  part(h,'box',0x7a5230, dxw, 0.46, hz+hh+0.04, {sx:0.54, sy:0.86, sz:0.05});
+  part(h,'sphere',0xe8c020, dxw+0.17, 0.48, hz+hh+0.08, {sx:0.05, sy:0.05, sz:0.05});
+  part(h,'box',0xb89a60, dxw, 0.06, hz+hh+0.25, {sx:0.9, sy:0.1, sz:0.4}); // 门前台阶
+  // 窗（南墙两扇，白窗面 + 棕窗棂）
+  for (const wx of [hx+1.25, hx+hw-1.25]){
+    part(h,'box',0xfff6dc, wx, 0.62, hz+hh+0.01, {sx:0.72, sy:0.55, sz:0.06});
+    part(h,'box',0x6a4a2c, wx, 0.62, hz+hh+0.035, {sx:0.06, sy:0.55, sz:0.03});
+    part(h,'box',0x6a4a2c, wx, 0.62, hz+hh+0.035, {sx:0.72, sy:0.06, sz:0.03});
+    part(h,'box',0x6a4a2c, wx, 0.92, hz+hh+0.03, {sx:0.82, sy:0.08, sz:0.05}); // 窗楣
+  }
+  farmGroup.add(h);
+
+  // 喵喵杂货摊（木摊台 + 红白条纹遮阳棚 + 金币招牌）
+  const s = new THREE.Group();
+  const sx0 = worldX(SHOP.x), sz0 = worldZ(SHOP.y);
+  const scx = sx0+1, scz = sz0+1;
+  part(s,'box',0x7a5a34, scx, 0.4, scz+0.2, {sx:2.2, sy:0.8, sz:1.5});     // 摊台
+  part(s,'box',0x9c7a48, scx, 0.84, scz+0.2, {sx:2.35, sy:0.1, sz:1.65});  // 台面
+  for (let k=0;k<6;k++){
+    part(s,'box', k%2? 0xf2e8d8 : 0xc0392b, sx0+0.17+k*0.38, 1.6, scz-0.1, {sx:0.38, sy:0.08, sz:2.1, rx:0.18});
+  }
+  part(s,'cyl',0x5a422a, sx0-0.05, 0.85, scz+0.8, {sx:0.14, sy:1.4, sz:0.14}); // 棚柱
+  part(s,'cyl',0x5a422a, sx0+2.05, 0.85, scz+0.8, {sx:0.14, sy:1.4, sz:0.14});
+  const rim = part(s,'disc',0x8a6a20, scx, 1.32, scz+1.02, {sx:1.35, sy:1.35, sz:1});  // 招牌外圈
+  rim.rotation.x = Math.PI/2;
+  const coin = part(s,'disc',0xe8c020, scx, 1.32, scz+1.05, {sx:1.1, sy:1.1, sz:1});
+  coin.rotation.x = Math.PI/2;
+  farmGroup.add(s);
+
+  // 喵喵（店主）
+  meowthMesh = buildPokemon('meowth');
+  meowthMesh.position.set(sx0+1.8, 0, sz0+1.9);
+  meowthMesh.rotation.y = -0.6;
+  entityGroup.add(meowthMesh);
+}
+
+/* ---- 室内 ---- */
+function buildInterior(){
+  const g = interiorGroup;
+  // 木地板（分段几何让灯光有渐变）+ 深浅条纹
+  const floorGeo = new THREE.PlaneGeometry(1, 1, 14, 10);
+  const floor = new THREE.Mesh(floorGeo, mat(0xc09a66));
+  floor.rotation.x = -Math.PI/2;
+  floor.scale.set(INT_W, INT_H, 1);
+  floor.position.set(0, 0, 0);
+  g.add(floor);
+  interiorGround = floor; // 用于室内鼠标拾取
+  for (let r=0;r<INT_H;r++){
+    part(g,'box', r%2? 0xb58e5c : 0xc79f6c, 0, 0.006, r-INT_H/2+0.5, {sx:INT_W, sy:0.012, sz:1});
+  }
+  // 墙（北墙高、东西矮、南侧开放不挡视线）
+  part(g,'box',0xd8c49a, 0, 0.8, -INT_H/2-0.15, {sx:INT_W+0.6, sy:1.6, sz:0.3});
+  part(g,'box',0xcbb691, -INT_W/2-0.15, 0.4, 0, {sx:0.3, sy:0.8, sz:INT_H});
+  part(g,'box',0xcbb691, INT_W/2+0.15, 0.4, 0, {sx:0.3, sy:0.8, sz:INT_H});
+  // 出口门垫
+  part(g,'box',0x8a6a42, INT_DOOR[0]-INT_W/2+0.5, 0.015, INT_DOOR[1]-INT_H/2+0.5, {sx:0.85, sy:0.03, sz:0.85});
+  // 地毯（双层）
+  part(g,'box',0x9a4a48, 0, 0.028, 0, {sx:3.4, sy:0.05, sz:3.4});
+  part(g,'box',0xb26055, 0, 0.055, 0, {sx:2.2, sy:0.05, sz:2.2});
+  // 床（床架 + 枕头 + 被子）
+  const bx = 10-INT_W/2+0.5, bz = 3-INT_H/2+0.5;
+  part(g,'box',0x5a4a78, bx, 0.2, bz, {sx:2, sy:0.4, sz:1});
+  part(g,'box',0x6a7ac0, bx-0.15, 0.46, bz, {sx:1.5, sy:0.14, sz:0.94});
+  part(g,'box',0xf0ead8, bx+0.65, 0.47, bz, {sx:0.5, sy:0.13, sz:0.84});
+  // 桌子（桌面 + 四条腿 + 桌上小物）
+  const tx = 4-INT_W/2+0.5, tz = 4-INT_H/2+0.5;
+  part(g,'box',0x9a6a3a, tx, 0.62, tz, {sx:1.2, sy:0.08, sz:2});
+  for (const [dx,dz] of [[-0.5,-0.85],[0.5,-0.85],[-0.5,0.85],[0.5,0.85]])
+    part(g,'box',0x6a4a22, tx+dx, 0.29, tz+dz, {sx:0.1, sy:0.58, sz:0.1});
+  part(g,'sphere',0xe8e4e0, tx-0.2, 0.74, tz-0.4, {sx:0.09, sy:0.12, sz:0.09});
+  part(g,'box',0xc05848, tx+0.2, 0.71, tz+0.5, {sx:0.3, sy:0.06, sz:0.22});
+  // 落地灯（杆 + 灯罩）+ 暖光
+  const lx = 2-INT_W/2+0.5, lz = 2-INT_H/2+0.5;
+  part(g,'cyl',0x6a4a2c, lx, 0.55, lz, {sx:0.08, sy:1.1, sz:0.08});
+  const lamp = part(g,'cone',0xf2d488, lx, 1.28, lz, {sx:0.42, sy:0.4, sz:0.42});
+  lamp.userData.lamp = true;
+  const lampLight = new THREE.PointLight(0xffd9a0, 0.9, 22);
+  lampLight.position.set(lx, 1.4, lz);
+  g.add(lampLight);
+}
+
+/* ---- 实体 ---- */
+function buildEntities(){
+  setPlayerForm3D(player.form);
+  rebuildNPCs3D();
+  rebuildWilds3D();
+}
+function rebuildNPCs3D(){
+  if (!GEO || !entityGroup || !game) return;
+  // 读档/新游戏时 game 对象会整体替换，必须同步重建 NPC 模型，避免引用旧状态
+  for (const nm of npcMeshes) entityGroup.remove(nm.group);
+  npcMeshes = [];
+  for (const n of game.npcs){
+    if (!n || !n.id) continue;
+    const g = buildPokemon(n.id);
+    g.position.set(worldX(n.x), 0, worldZ(n.y));
+    entityGroup.add(g);
+    npcMeshes.push({group:g, npc:n});
+  }
+}
+let wildMeshes = [];
+function rebuildWilds3D(){
+  if (!GEO || !entityGroup || !game) return;
+  for (const wm of wildMeshes) entityGroup.remove(wm.group);
+  wildMeshes = [];
+  for (const w of game.wilds||[]){
+    if (!w || !WILD_POOL[w.id]) continue;
+    const g = buildPokemon(w.id);
+    g.position.set(worldX(w.x), 0, worldZ(w.y));
+    entityGroup.add(g);
+    wildMeshes.push({group:g, wild:w});
+  }
+}
+
+/* =====================================================================
+   宝可梦低多边形建模（形神兼具：剪影 + 配色 + 表情 + 待机动画）
+   ===================================================================== */
+/* =====================================================================
+   像素精灵系统（2.5D 精髓：3D 场景 + 像素人物）
+   16×16 程序化像素图 → CanvasTexture → 面向镜头的 Sprite。
+   每只：前/后/侧三向，左右共用侧图镜像；走路为双帧（整体下沉+脚部错位）。
+   ===================================================================== */
+const PX_OUTLINE = '#241c20';
+const PIXEL_ART = {
+  ditto: { h:1.0, pal:{p:'#d99cc8', d:'#c78bc0', e:'#4a2840'},
+    front:[
+      '.....kkkkkk.....','....kppppppk....','...kppppppppk...','..kppppppppppk..',
+      '..kpkpppppkppk..','..kpkpppppkppk..','..kppppppppppk..','..kppeeeeppppk..',
+      '..kpppkkkppppk..','..kdppppppppdk..','...kdddddddk....','....kkkkkkk.....' ],
+    back:[
+      '.....kkkkkk.....','....kppppppk....','...kppppppppk...','..kppppppppppk..',
+      '..kppppppppppk..','..kppppppppppk..','..kppppppppppk..','..kppppppppppk..',
+      '..kppppppppppk..','..kdppppppppdk..','...kdddddddk....','....kkkkkkk.....' ],
+    side:[
+      '................','.....kkkkkk.....','....kppppppk....','...kppppppppk...',
+      '..kpppppppppk...','..kpkppppppppk..','..kpkppppppppk..','..kpppppppppk...',
+      '..kpppeeeppppk..','..kdppppppppdk..','...kdddddddk....','....kkkkkkk.....' ] },
+  diglett: { h:0.78, pal:{p:'#a87a50', d:'#8a5e38', n:'#e88aa0', m:'#7a4636'},
+    front:[
+      '................','......kkkk......','.....kppppk.....','....kppppppk....',
+      '...kppppppppk...','...kpkppppkpk...','...kpkppppkpk...','...kpppnnpppk...',
+      '...kpppnnpppk...','...kpppmmpppk...','...kppppppppk...','..kddppppppddk..',
+      '.kdddkkkkkdddk..','.kddk.....kddk..','..kk.......kk...','................' ],
+    back:[
+      '................','......kkkk......','.....kppppk.....','....kppppppk....',
+      '...kppppppppk...','...kppppppppk...','...kppppppppk...','...kppppppppk...',
+      '...kppppppppk...','...kppppppppk...','...kppppppppk...','..kddppppppddk..',
+      '.kdddkkkkkdddk..','.kddk.....kddk..','..kk.......kk...','................' ],
+    side:[
+      '................','......kkkk......','.....kppppk.....','....kppppppk....',
+      '...kppppppppk...','...kpppkppppk...','...kpppkppppk...','...kpppnnppk....',
+      '...kpppnnppk....','...kpppmmppk....','...kpppppppk....','..kddppppppk....',
+      '.kdddkkkkkddk...','.kddk....kddk...','..kk......kk....','................' ] },
+  squirtle: { h:1.05, pal:{p:'#7ec8e8', d:'#58a0c0', a:'#f2e8c8', s:'#8a5a2b', t:'#a87848'},
+    front:[
+      '................','....kkkkkk......','...kppppppk.....','..kpwkppkwpk....',
+      '..kppppppppk....','..kppkaakppk....','...kppppppk.....','..kkkkkkkkkk....',
+      '.ksskssksskssk..','.kaapsskpspaak..','.kaapksskppkak..','..kkkssksskkk...',
+      '...kpppppppk....','...kpk...kpk....','...kk.....kk....','................' ],
+    back:[
+      '................','....kkkkkk......','...kppppppk.....','..kppppppppk....',
+      '..kppppppppk....','..kppppppppk....','...kppppppk.....','..kkkkkkkkkk....',
+      '.ksssssssssssk..','.ksttsskssttsk..','.ksskttkktkssk..','..kksssssskkk...',
+      '...kpppkppk.....','...kpk...kpk....','...kk.....kk....','................' ],
+    side:[
+      '................','....kkkkkk......','...kppppppk.....','..kpwkpppppk....',
+      '..kppppppppk....','..kpppkaakpk....','...kppppak......','..kkkkkkkkkk....',
+      '.kssskssksssk...','.kaapksskpspaak.','.kakpksskpkka...','..kkkssskssk....',
+      '...kpppppk......','...kpk..kpk.....','...kk....kk.....','................' ] },
+  scyther: { h:1.3, pal:{p:'#58c858', d:'#3f9a3f', a:'#f2e8c8', w:'#a8e8c8', e:'#d03030'},
+    front:[
+      '.......kk.......','......kppk......','.....kppppk.....','.....kepepek....',
+      '....kppppppk....','...kkppppppkk...','..kakpkppkpkak..','.kakakpkppkpkak.',
+      '.kak.kpppppk.k..','..k.kappppak.k..','....kpkppkpk....','....kpkppkpk....',
+      '...kppk..kppk...','...kdk....kdk...','....kk....kk....','................' ],
+    back:[
+      '.......kk.......','......kppk......','.....kppppk.....','.....kppppk.....',
+      '....kppppppk....','...kkppwwppkk...','..kakpkwwkpkak..','.kakakpwwkpkak..',
+      '.kak.kpwwpk.k...','..k.kappppak.k..','....kpkppkpk....','....kpkppkpk....',
+      '...kppk..kppk...','...kdk....kdk...','....kk....kk....','................' ],
+    side:[
+      '.......kk.......','......kppk......','.....kpppek.....','.....kppppk.....',
+      '....kpppppk.....','....kppwwkk.....','...kapwkkak.....','...kakkkkak.....',
+      '...kakkaak......','....kkappak.....','....kpkkakk.....','...kppk..kk.....',
+      '...kdpk.........','...kdk..kk......','....kk..........','................' ] },
+  geodude: { h:0.95, pal:{p:'#9a8a86', d:'#7a6c68', e:'#333333'},
+    front:[
+      '................','.....kkkkkk.....','....kppppppk....','...kppdppdppk...',
+      '..kppppppppppk..','..kpekpppkeppk..','..kppppppppppk..','..kppppppppppk..',
+      '..kpkdddddkppk..','..kppppppppppk..','...kppppppppk...','..kppk.k.kppk...',
+      '.kppk.k.k.kppk..','.kpk.......kpk..','.kdk.......kdk..','..kk.......kk...' ],
+    back:[
+      '................','.....kkkkkk.....','....kppppppk....','...kppdppdppk...',
+      '..kppdppppdppk..','..kppppppppppk..','..kppppppppppk..','..kppdppppdppk..',
+      '..kpkpppppkppk..','..kppppppppppk..','...kppppppppk...','..kppk.k.kppk...',
+      '.kppk.k.k.kppk..','.kpk.......kpk..','.kdk.......kdk..','..kk.......kk...' ],
+    side:[
+      '................','.....kkkkkk.....','....kppppppk....','...kppdppdppk...',
+      '..kppppppdpppk..','..kppkeppppppk..','..kppppppdpppk..','..kppppppppppk..',
+      '..kpkddddkpppk..','..kppppppppppk..','...kppppppppk...','..kppk.k.kpppk..',
+      '.kppk.k.k.kppk..','.kpk.......kpk..','.kdk.......kdk..','..kk.......kk...' ] },
+  bulbasaur: { h:1.0, pal:{p:'#5fc8b8', d:'#3f9a90', g:'#4a9a5a', G:'#3d8548', e:'#d03030'},
+    front:[
+      '......kkkk......','.....kggggk.....','....kgGggGgk....','...kggggggggk...',
+      '..kkkkkkkkkkkk..','..kpepppppepk...','..kpppppppppk...','..kppkddddkppk..',
+      '..kppppppppppk..','...kppppppppk...','...kpk....kpk...','...kpk....kpk...',
+      '..kdpk....kpdk..','..kppk....kppk..','...kk......kk...','................' ],
+    back:[
+      '......kkkk......','.....kggggk.....','....kggggggk....','...kggggggggk...',
+      '..kkkkkkkkkkkk..','..kpppppppppk...','..kppdppppdppk..','..kpppppppppk...',
+      '..kppppdppppk...','...kppppppppk...','...kpk....kpk...','...kpk....kpk...',
+      '..kdpk....kpdk..','..kppk....kppk..','...kk......kk...','................' ],
+    side:[
+      '......kkkk......','.....kggggk.....','....kgGggGgk....','...kgggggggk....',
+      '..kkkkkkkkkkk...','..kpeppppppk....','..kppppdpppk....','..kppkdddppk....',
+      '..kpppppppppk...','...kppppppppk...','...kpk...kpk....','...kpk...kpk....',
+      '..kdpk...kpdk...','..kppk...kppk...','...kk.....kk....','................' ] },
+  pikachu: { h:1.08, pal:{y:'#f8d030', d:'#d8a820', b:'#3a2a1a', r:'#e05050', k:'#241c20'},
+    front:[
+      '..kk.......kk...','.kbbk.....kbbk..','.kbyk.....kybk..','..kyk.....kyk...',
+      '..kyykkkkkyyk...','..kyyyyyyyyyk...','.kykwyyykwyky...','.kyykyyykyyyk...',
+      '.kyryykykyyryk..','.kyyykkkkyyyk...','..kyyyyyyyyyk...','..kybyyyybyk....',
+      '..kyyyyyyyyk....','...kyyk.kyyk....','...kyk...kyk....','....kk....kk....' ],
+    back:[
+      '..kk.......kk...','.kbbk.....kbbk..','.kbyk.....kybk..','..kyk.....kyk...',
+      '..kyykkkkkyyk...','..kyyyyyyyyyk...','..kyyyyyyyyyk...','..kyyyyyyyyyk...',
+      '..kyybyybyyyk...','..kybbbbbbbyk...','..kyyyyyyyyyk...','..kybyyyybyk....',
+      '..kyyyyyyyyk....','...kyyk.kyyk....','...kyk...kyk....','....kk....kk....' ],
+    side:[
+      '..kk............','.kbbk...........','.kbyk...........','..kyk...........',
+      '..kyykkkkkk.....','..kyyyyyyyykk...','..kyyykwyyyyk...','..kyyyykyyyyk...',
+      '..kyyyyyykyyk...','..kyyykkkyyyk...','..kyyyyyyyyyk...','..kybyyyybyk....',
+      '..kyyyyyyyyk....','...kyyk.kyyk....','...kyk...kyk....','....kk....kk....' ] },
+  eevee: { h:1.0, pal:{p:'#c89a68', d:'#a87c48', a:'#f2e0c0', e:'#6a4020'},
+    front:[
+      '..kk.......kk...','..kpk.....kpk...','..kek.....kek...','..kpk.....kpk...',
+      '..kppkkkkkppk...','..kpaappppaak...','.kppwppppwppk...','.kppkppppkpppk..',
+      '.kppppkkkppppk..','.kpkppaaappkpk..','..kpppppppppk...','..kpdpppppdpk...',
+      '...kpppppppk....','...kpk...kpk....','...kk.....kk....','................' ],
+    back:[
+      '..kk.......kk...','..kpk.....kpk...','..kek.....kek...','..kpk.....kpk...',
+      '..kppkkkkkppk...','..kpppppppppk...','..kpppppppppk...','..kppdppppdppk..',
+      '..kpppppppppk...','..kpdpppppdpk...','..kpppppppppk...','..kpdpppppdpk...',
+      '...kpppppppk....','...kpk...kpk....','...kk.....kk....','................' ],
+    side:[
+      '..kk............','..kpk...........','..kek...........','..kpk...........',
+      '..kppkkkkkk.....','..kpaappppppk...','..kpwpppppppk...','..kpppkppppppk..',
+      '..kppppkkppppk..','..kpkppaaappk...','..kpppppppppk...','..kpdpppppdpk...',
+      '...kpppppppk....','...kpk...kpk....','...kk.....kk....','................' ] },
+  charmander: { h:1.05, pal:{p:'#e89040', d:'#c87028', a:'#f8e0b0', f:'#f05030', F:'#ffd75e'},
+    front:[
+      '........ff......','.......kFfk.....','..kk...kFfk.....','..kpk..kfpk.....',
+      '.kppkkkkppk.....','.kpwkppkwpk.....','.kpppppppppk....','.kpppkkkpppk....',
+      '.kpaaaaaappk....','.kpaaaaaappk....','..kpppppppk.....','..kpdpk.kpdk....',
+      '..kppk.kppk.....','...kk...kk......','................','................' ],
+    back:[
+      '........ff......','.......kFfk.....','..kk...kFfk.....','..kpk..kfpk.....',
+      '.kppkkkkppk.....','.kpppppppppk....','.kpppppppppk....','.kppdppppppk....',
+      '.kpaaaaaappk....','.kpaaaaaappk....','..kpppppppk.....','..kpdpk.kpdk....',
+      '..kppk.kppk.....','...kk...kk......','................','................' ],
+    side:[
+      '........ff......','.......kFfk.....','..kk...kfpk.....','..kpk..kkk......',
+      '.kppkkkkppk.....','.kpwkppppppk....','.kppppppppk.....','.kpppkkkppk.....',
+      '.kpaaaaaapk.....','.kpaaaaaapk.....','..kpppppppk.....','..kpdpk.kpk.....',
+      '..kppk..kpk.....','...kk....kk.....','................','................' ] },
+  snorlax: { h:1.32, pal:{p:'#4a7a6a', a:'#f2e0c0', d:'#3a5a4a', w:'#ffffff'},
+    front:[
+      '................','...kk.....kk....','..kppk...kppk...','..kppkkkkkppk...',
+      '..kpaappppaak...','..kaaaaaaaaak...','..kpk aaa kpk...','.kpkkkkkkkkpk...',
+      'kppkaaaaaappk...','kppkaa w kaapk..','kppkaaaaaappk...','kppkaaaaaappk...',
+      '.kppppppppppk...','..kpak..kapk....','..kaak..kaak....','...kk....kk.....' ],
+    back:[
+      '................','...kk.....kk....','..kppk...kppk...','..kppkkkkkppk...',
+      '..kpppppppppk...','..kpppppppppk...','..kppdpppdppk...','..kpppppppppk...',
+      'kpppppdppppppk..','kppppppppppppk..','kpppdppppdpppk..','kppppppppppppk..',
+      '.kppppppppppk...','..kpak..kapk....','..kaak..kaak....','...kk....kk.....' ],
+    side:[
+      '................','...kk...........','..kppk..........','..kppkkkkkk.....',
+      '..kpaapppppk....','..kaaaaaappk....','..kpk aaappk....','.kpkkkkkappk....',
+      'kppkaaaaappk....','kppka wkaapk....','kppkaaaaaapk....','kpppaaaaaapk....',
+      '.kpppppppppk....','..kpak.kapk.....','..kaak.kaak.....','...kk...kk......' ] },
+  pidgey: { h:0.92, pal:{p:'#c8a068', d:'#a87c44', a:'#f2e4c8', b:'#38302a', k:'#241c20'},
+    front:[
+      '................','......kkkk......','.....kppppk.....','....kpdkkdkp....',
+      '....kpppppppk...','....kpdbdbppk...','....kppppppk....','.....kppppk.....',
+      '...kkpppppkk....','..kpdkaaakdpk...','..kdkpaaaapkd...','...kppppppk.....',
+      '....kabba k.....','....kbbk........','.....kbk........','......kk........' ],
+    back:[
+      '................','......kkkk......','.....kppppk.....','....kpdkkdkp....',
+      '....kppppppk....','....kppppppk....','....kpdppdpk....','.....kppppk.....',
+      '...kkpppppkk....','..kpdkppppkdk...','..kdkppppppkd...','...kppppppk.....',
+      '....kppbppk.....','....kbbbk.......','.....kbk........','......kk........' ],
+    side:[
+      '................','......kkkk......','.....kppppk.....','....kpdkpdk.....',
+      '....kppppppk....','....kpdbdbpk....','....kppppppbb...','.....kppppkbk...',
+      '...kkpppppkbk...','..kpdkaakppbk...','..kdkpaaaapk....','...kppppppk.....',
+      '....kabbaak.....','....kbbbk.......','.....kbk........','......kk........' ] },
+  magnemite: { h:0.9, pal:{p:'#b8bec8', d:'#8a9098', r:'#d84a3a', b:'#4a6ad8', u:'#3a5ac8'},
+    front:[
+      '................','......kkkk......','.....kppppk.....','....kpuuuppk....',
+      '....kpuwuppk....','....kpuuuppk....','....kppppppk....','..kkkppppppkkk..',
+      '.kpdkkddddkkpdk.','.krpk.kppk.kbpk.','.krpk.kppk.kbpk.','.kddk.kppk.kddk.',
+      '..kk..kddk..kk..','......kkkk......','................','................' ],
+    back:[
+      '................','......kkkk......','.....kppppk.....','....kppppppk....',
+      '....kppdpppk....','....kppppppk....','....kppppppk....','..kkkppppppkkk..',
+      '.kpdkkddddkkpdk.','.krpk.kppk.kbpk.','.krpk.kppk.kbpk.','.kddk.kppk.kddk.',
+      '..kk..kddk..kk..','......kkkk......','................','................' ],
+    side:[
+      '................','......kkkk......','.....kppppk.....','....kpuupppk....',
+      '....kpuwuppk....','....kpuuuppk....','....kppppppkk...','..kkkpppppkpdk..',
+      '.kpdkkddddkpdk..','.krpk.kppk.kbdk.','.krpk.kppk.kddk.','.kddk.kddk..kk..',
+      '..kk..kkkk......','......kkkk......','................','................' ] },
+  oddish: { h:0.88, pal:{p:'#5878d8', d:'#3a68c8', g:'#4aa85c', G:'#3f8a4e', e:'#d03030'},
+    front:[
+      '................','....kkkkkkkk....','...kg.gGG.gk....','..kggkkgggkkg...',
+      '..kgg.kkgk.gg...','...kkkkkkkkk....','...kppppppppk...','..kpkepppeppk...',
+      '..kpepppppepk...','..kppppkppppk...','..kpppppppppk...','..kdpppppppdk...',
+      '..kdpppppppdk...','...kkkkkkkkk....','...kdk....kdk...','...kk......kk...' ],
+    back:[
+      '................','....kkkkkkkk....','...kgggggggk....','..kgggggggggk...',
+      '..kgggggggggk...','...kkkkkkkkk....','...kppppppppk...','..kppppppppppk..',
+      '..kpppppppppk...','..kppdppppdpk...','..kpppppppppk...','..kdpppppppdk...',
+      '..kdpppppppdk...','...kkkkkkkkk....','...kdk....kdk...','...kk......kk...' ],
+    side:[
+      '................','....kkkkkkkk....','...kg.gGGkgk....','..kggkkgggkk....',
+      '..kgg.kkgk.k....','...kkkkkkkkk....','...kpppppppk....','..kpkepppepk....',
+      '..kpeppppppk....','..kppppkpppk....','..kppppppppk....','..kdppppppdk....',
+      '..kdppppppdk....','...kkkkkkkkk....','...kdk...kdk....','...kk.....kk....' ] },
+  psyduck: { h:1.0, pal:{p:'#f2e0b0', d:'#d8b86a', b:'#e89838', B:'#d07828', k:'#241c20'},
+    front:[
+      '......k.k.......','.....kdkdk......','....kdkdkdk.....','.....kkkkk......',
+      '....kppppppk....','...kpwpppwppk...','...kppppppppk...','...kbbbbbbbbk...',
+      '...kBbbbbbbBk...','....kppppppk....','..kpkppppppkpk..','..kpkppppppkpk..',
+      '...kppppppppk...','....kppkppk.....','....kbpk.kbk....','.....kk...kk....' ],
+    back:[
+      '......k.k.......','.....kdkdk......','....kdkdkdk.....','.....kkkkk......',
+      '....kppppppk....','...kppppppppk...','...kppppppppk...','...kppppppppk...',
+      '...kppppppppk...','....kppppppk....','..kpkppppppkpk..','..kpkppppppkpk..',
+      '...kppppppppk...','....kppkppk.....','....kbpk.kbk....','.....kk...kk....' ],
+    side:[
+      '......k.k.......','.....kdkdk......','....kdkdkdk.....','.....kkkkk......',
+      '....kppppppk....','...kpwpppppk....','...kpppppppk....','...kbbbbbbbb....',
+      '...kBbbbbbbk....','....kppppppk....','..kpkpppppkpk...','..kpkppppppkpk..',
+      '...kppppppppk...','....kppkppk.....','....kbpk.kbk....','.....kk...kk....' ] },
+  meowth: { h:1.0, pal:{p:'#f2e0c0', d:'#d8c8a8', g:'#e8c020', e:'#c89818', n:'#c89078', B:'#8a5a30'},
+    front:[
+      '...kk.....kk....','..kppk...kppk...','..kepk...kpek...','..kppkkBkkppk...',
+      '..kppkggkpppk...','..kppkggkpppk...','..kpppppppppk...','.kpwkpppppkwpk..',
+      '.kppkppppkpppk..','.kpkkkaakkkppk..','.kpdpknnkpdpk...','..kpkpkkkpkkpk..',
+      '..kpkpppppkkpk..','...kpppppppk....','...kdpk.kpdk....','....kk...kk.....' ],
+    back:[
+      '...kk.....kk....','..kppk...kppk...','..kepk...kpek...','..kppkkkkkppk...',
+      '..kpppppppppk...','..kpppppppppk...','..kpppppppppk...','..kppdppppdppk..',
+      '..kpppppppppk...','..kpdpppppdpk...','..kpppppppppk...','..kpkpppppkppk..',
+      '..kpkpppppkppk..','...kpppppppk....','...kdpk.kpdk....','....kk...kk.....' ],
+    side:[
+      '...kk...........','..kppk..........','..kepk..........','..kppkkkkk......',
+      '..kppppggk......','..kpppkggk......','..kpppppppk.....','..kpwkppppk.....',
+      '..kppkpppppk....','..kpkkkaaakk....','..kpdpknnkpk....','..kpkpkkkppk....',
+      '..kpkppppppk....','...kppppppk.....','...kdpk.kpk.....','....kk...kk.....' ] },
+};
+/* 行末补齐到 16 列，容错短行 */
+function pxRow(row){ return (row+'................').slice(0,16); }
+const pxCanvasCache = new Map();
+function pxCanvas(id, dirName, frame){
+  const key = id+'|'+dirName+'|'+frame;
+  if (pxCanvasCache.has(key)) return pxCanvasCache.get(key);
+  const def = PIXEL_ART[id];
+  const pal = Object.assign({k:PX_OUTLINE, w:'#ffffff'}, def ? def.pal : {});
+  let base = (def && (def[dirName] || def.front)) || PIXEL_ART.ditto.front;
+  let rows = base.map(pxRow);
+  if (frame===1){ // 走路帧：整体下沉 1px + 脚部行错位
+    rows = ['................'].concat(rows.slice(0,15));
+    rows[15] = rows[15].slice(2) + rows[15].slice(0,2);
+    if (rows[14]) rows[14] = rows[14].slice(14) + rows[14].slice(0,14);
+  }
+  const mirror = dirName==='left';
+  const cnv = document.createElement('canvas');
+  cnv.width = 16; cnv.height = 16;
+  const ctx = cnv.getContext('2d');
+  for (let y=0;y<rows.length;y++){
+    for (let x=0;x<16;x++){
+      const ch = rows[y][mirror ? 15-x : x];
+      const col = pal[ch];
+      if (!col) continue;
+      ctx.fillStyle = col;
+      ctx.fillRect(x, y, 1, 1);
+    }
+  }
+  pxCanvasCache.set(key, cnv);
+  return cnv;
+}
+const pixelTexCache = new Map();
+function pixelTexture(id, dirName, frame){
+  const key = id+'|'+dirName+'|'+frame;
+  let tex = pixelTexCache.get(key);
+  if (tex) return tex;
+  tex = new THREE.CanvasTexture(pxCanvas(id, dirName, frame));
+  tex.magFilter = THREE.NearestFilter;
+  tex.minFilter = THREE.NearestFilter;
+  tex.generateMipmaps = false;
+  pixelTexCache.set(key, tex);
+  return tex;
+}
+/* 像素图编号：front/back/side（side 朝右，left 用镜像） */
+function setSpriteFacing(g, dirName){
+  if (!g || !g.userData.sprite || g.userData.dir===dirName) return;
+  g.userData.dir = dirName;
+  g.userData.sprite.material.map = pixelTexture(g.userData.id, dirName, g.userData.frame);
+  g.userData.sprite.material.needsUpdate = true;
+}
+function setSpriteFrame(g, frame){
+  frame = frame ? 1 : 0;
+  if (!g || !g.userData.sprite || g.userData.frame===frame) return;
+  g.userData.frame = frame;
+  g.userData.sprite.material.map = pixelTexture(g.userData.id, g.userData.dir, frame);
+  g.userData.sprite.material.needsUpdate = true;
+}
+/* 朝向角（atan2(dx,dz)）→ 四向像素图 */
+function facingToDir(angle){
+  const s = Math.sin(angle||0), c = Math.cos(angle||0);
+  if (Math.abs(s) > Math.abs(c)) return s>0 ? 'right' : 'left';
+  return c>0 ? 'front' : 'back';
+}
+/* 脚下半透明阴影盘：共享几何与材质，给精灵接地感 */
+const POKEMON_SHADOW_R = {ditto:0.4, diglett:0.32, squirtle:0.42, scyther:0.38, geodude:0.44,
+  bulbasaur:0.42, pikachu:0.4, eevee:0.4, charmander:0.4, snorlax:0.6, pidgey:0.38,
+  magnemite:0.28, oddish:0.38, psyduck:0.4, meowth:0.4};
+function addShadow(g, id){
+  if (!GEO || !shadowMat) return;
+  const s = new THREE.Mesh(GEO.disc, shadowMat);
+  const r = POKEMON_SHADOW_R[id] || 0.4;
+  s.scale.set(r/0.26, 1, r/0.26);
+  s.position.y = 0.035;
+  g.add(s);
+}
+/* 各精灵的世界高度（16×16 像素图按此高度渲染，脚底接地） */
+const POKEMON_H = {ditto:1.15, diglett:0.9, squirtle:1.2, scyther:1.45, geodude:1.1,
+  bulbasaur:1.15, pikachu:1.25, eevee:1.15, charmander:1.2, snorlax:1.5, pidgey:1.05,
+  magnemite:1.05, oddish:1.0, psyduck:1.15, meowth:1.15};
+function buildPokemon(id){
+  const g = new THREE.Group();
+  g.userData.id = id;
+  g.userData.dir = 'front';
+  g.userData.frame = 0;
+  const h = POKEMON_H[id] || 1.0;
+  const spr = new THREE.Sprite(new THREE.SpriteMaterial({map: pixelTexture(id, 'front', 0), transparent:true}));
+  spr.center.set(0.5, 0); // 以脚底为锚点贴地
+  spr.scale.set(h, h, 1);
+  g.add(spr);
+  g.userData.sprite = spr;
+  addShadow(g, id);
+  return g;
+}
+
+/* ---- 变身 ---- */
+function setPlayerForm3D(form){
+  if (!GEO || !playerGroup) return;
+  if (playerMesh) playerGroup.remove(playerMesh);
+  playerMesh = buildPokemon(form||'ditto');
+  playerMesh.userData.form = form;
+  playerMesh.userData.id = form;
+  playerGroup.add(playerMesh);
+}
+
+/* ---- 像素精灵动画：朝向 + 走路双帧（移动中自动切换，静止回第 0 帧） ---- */
+function animateModel(g, t){
+  // 兼容保留：t 参数用于帧节拍；朝向由移动向量另行驱动
+  const moving = g.userData.moving;
+  setSpriteFrame(g, moving ? Math.floor(t*6)%2 : 0);
+}
+
+/* =====================================================================
+   2D 全像素渲染器（场景与人物皆为像素；旧 3D 渲染保留为后备路径）
+   ===================================================================== */
+const USE_PIXEL_2D = true;
+const PX_SCALE = 2, TILE = 16, S = TILE*PX_SCALE; // 16px 美术 ×2 → 每格 32 屏幕像素
+const VIEW_TW = Math.round(VIEW_W/S), VIEW_TH = Math.round(VIEW_H/S); // 可视格数 30×20
+let px2 = null;
+function cssColor(hex){ return '#'+hex.toString(16).padStart(6,'0'); }
+function initRender2D(){
+  px2 = canvas.getContext('2d');
+  px2.imageSmoothingEnabled = false;
+}
+function camLeftX(){ return inHouse ? (INT_W-VIEW_TW)/2 : camTarget.x + MAP_W/2 - VIEW_TW/2; }
+function camTopY(){ return inHouse ? (INT_H-VIEW_TH)/2 : camTarget.z + MAP_H/2 - VIEW_TH/2; }
+/* 2D 相机跟随：死区 + 边界夹取（与 3D 版同参数） */
+function updateCamera2D(dt){
+  if (!game) return;
+  if (inHouse){ camTarget.x = 0; camTarget.z = 0; return; }
+  const dx = player.x - camTarget.x, dz = player.y - camTarget.z;
+  let tx = camTarget.x, tz = camTarget.z;
+  if (Math.abs(dx) > DEAD_X) tx = player.x - Math.sign(dx)*DEAD_X;
+  if (Math.abs(dz) > DEAD_Z) tz = player.y - Math.sign(dz)*DEAD_Z;
+  const k = Math.min(1, dt*8);
+  camTarget.x += (tx - camTarget.x)*k;
+  camTarget.z += (tz - camTarget.z)*k;
+  camTarget.x = clamp(camTarget.x, -CLAMP_X, CLAMP_X);
+  camTarget.z = clamp(camTarget.z, -CLAMP_Z, CLAMP_Z);
+}
+/* 像素椭圆（按行填充，保证像素感） */
+function pxBlob(cx, cy, rx, ry){
+  for (let dy=-ry; dy<=ry; dy++){
+    const w = Math.floor(rx*Math.sqrt(Math.max(0, 1-(dy/ry)*(dy/ry))));
+    if (w<=0) continue;
+    px2.fillRect(cx-w, cy+dy, w*2+1, 1);
+  }
+}
+/* ---- 地面 ---- */
+function drawTile2D(x, y, t){
+  const i = idx(x,y);
+  const bx = Math.round((x-camLeftX())*S), by = Math.round((y-camTopY())*S);
+  px2.fillStyle = shadeColor(groundTileBase(x,y), game.shade[i]);
+  px2.fillRect(bx, by, S, S);
+  const h = hash2(x,y);
+  if (t===T_GRASS){
+    px2.fillStyle = 'rgba(0,0,0,0.07)';
+    px2.fillRect(bx+(h%13)+1, by+((h>>4)%13)+1, 2, 2);
+    px2.fillRect(bx+((h>>8)%12)+2, by+((h>>12)%12)+2, 2, 2);
+  } else if (t===T_WATER){
+    const ph = Math.floor(t*2 + x*1.3 + y*0.7) % 4;
+    px2.fillStyle = 'rgba(255,255,255,0.15)';
+    px2.fillRect(bx+2+ph*2, by+4, 5, 1);
+    px2.fillRect(bx+11-ph*2, by+10, 4, 1);
+  } else if (t===T_TILLED){
+    px2.fillStyle = 'rgba(0,0,0,0.16)';
+    for (let r=3;r<S;r+=5) px2.fillRect(bx+1, by+r, S-2, 1);
+    if (game.watered[i]){ px2.fillStyle = 'rgba(30,16,50,0.28)'; px2.fillRect(bx, by, S, S); }
+  } else if (t===T_PATH){
+    px2.fillStyle = 'rgba(0,0,0,0.08)';
+    px2.fillRect(bx+((h>>2)%10)+2, by+((h>>6)%10)+2, 3, 2);
+  }
+}
+/* ---- 装饰 ---- */
+function drawTree2D(tx, ty, stump){
+  const cx = Math.round((tx+0.5-camLeftX())*S), gy = Math.round((ty+1-camTopY())*S);
+  if (stump){
+    px2.fillStyle = '#6b4a2b'; px2.fillRect(cx-5, gy-10, 10, 10);
+    px2.fillStyle = '#8a6236'; px2.fillRect(cx-7, gy-11, 14, 3);
+    return;
+  }
+  px2.fillStyle = '#6b4a2b'; px2.fillRect(cx-3, gy-16, 6, 16);
+  px2.fillStyle = '#594022'; px2.fillRect(cx+1, gy-16, 2, 16);
+  const leaves = TREE_LEAVES[game.season] || TREE_LEAVES.spring;
+  px2.fillStyle = cssColor(leaves[0]); pxBlob(cx, gy-24, 15, 11);
+  px2.fillStyle = cssColor(leaves[1]); pxBlob(cx-6+((tx*7)%5), gy-31, 10, 8);
+  px2.fillStyle = cssColor(leaves[2]); pxBlob(cx+7, gy-28, 9, 7);
+  px2.fillStyle = 'rgba(255,255,255,0.13)'; pxBlob(cx-5, gy-33, 4, 3);
+  if (game.season==='winter'){ px2.fillStyle = '#eef4f8'; pxBlob(cx, gy-27, 14, 5); }
+}
+function drawRock2D(tx, ty){
+  const cx = Math.round((tx+0.5-camLeftX())*S), gy = Math.round((ty+1-camTopY())*S);
+  px2.fillStyle = '#7d8188'; pxBlob(cx, gy-6, 8, 6);
+  px2.fillStyle = '#94989f'; pxBlob(cx-3, gy-9, 4, 3);
+  px2.fillStyle = 'rgba(255,255,255,0.16)'; px2.fillRect(cx-4, gy-11, 3, 2);
+}
+function drawTallGrass2D(tx, ty){
+  const cx = Math.round((tx+0.5-camLeftX())*S), gy = Math.round((ty+1-camTopY())*S);
+  const h = hash2(tx,ty);
+  px2.fillStyle = '#5a9a48';
+  for (let k=0;k<3;k++){
+    const ox = (k-1)*5 + (h%3);
+    const hh = 7 + ((h>>k)%3);
+    for (let r=0;r<hh;r++) px2.fillRect(cx+ox+(r>hh/2?1:0), gy-r, 2, 1);
+  }
+}
+function drawFlower2D(tx, ty){
+  const cx = Math.round((tx+0.5-camLeftX())*S), gy = Math.round((ty+1-camTopY())*S);
+  const h = hash2(tx,ty);
+  const cols = ['#e86a8a', '#f2c84a', '#ffffff', '#c87ae8'];
+  const c = cols[h%cols.length];
+  px2.fillStyle = '#4e8a3c'; px2.fillRect(cx, gy-8, 2, 8);
+  px2.fillStyle = c;
+  px2.fillRect(cx-3, gy-11, 3, 3); px2.fillRect(cx+2, gy-11, 3, 3);
+  px2.fillRect(cx-3, gy-6, 3, 3);  px2.fillRect(cx+2, gy-6, 3, 3);
+  px2.fillStyle = '#f2d050'; px2.fillRect(cx, gy-9, 2, 2);
+}
+function drawCrop2D(tx, ty, crop){
+  const cx = Math.round((tx+0.5-camLeftX())*S), gy = Math.round((ty+1-camTopY())*S);
+  const c = CROPS[crop.type];
+  const prog = crop.rem<=0 ? 1 : 1 - crop.rem/c.days;
+  const stage = crop.rem<=0 ? 3 : (prog<0.3?0 : prog<0.6?1 : 2);
+  px2.fillStyle = '#3f8a26';
+  if (stage===0){
+    px2.fillRect(cx-1, gy-6, 2, 6);
+    px2.fillStyle = '#6cbf3f'; px2.fillRect(cx-4, gy-7, 3, 2); px2.fillRect(cx+2, gy-7, 3, 2);
+  } else {
+    const r = [0,6,8,9][stage];
+    px2.fillStyle = '#3f8a26'; pxBlob(cx, gy-r-2, r+2, r);
+    px2.fillStyle = '#5fae36'; pxBlob(cx-2, gy-r-4, r-2, r-3);
+    if (stage===3){
+      px2.fillStyle = cssColor(c.berry);
+      px2.fillRect(cx-4, gy-10, 4, 4); px2.fillRect(cx+2, gy-8, 3, 3); px2.fillRect(cx-1, gy-5, 3, 3);
+    }
+  }
+}
+/* ---- 建筑 ---- */
+function drawHouse2D(){
+  const x0 = Math.round((HOUSE.x-camLeftX())*S), y0 = Math.round((HOUSE.y-camTopY())*S);
+  const W = HOUSE.w*S, H = HOUSE.h*S, roofH = Math.round(H*0.42);
+  px2.fillStyle = '#e8d9b8'; px2.fillRect(x0, y0+roofH, W, H-roofH);       // 墙
+  px2.fillStyle = '#d8c8a4';
+  for (let vx=6; vx<W; vx+=22) px2.fillRect(x0+vx, y0+roofH, 2, H-roofH);  // 木梁
+  for (let r=0;r<roofH;r+=2){                                              // 双坡屋顶
+    const inset = Math.max(0, Math.round((roofH-r)*0.45));
+    px2.fillStyle = (r>>1)%2 ? '#9a4430' : '#a04830';
+    px2.fillRect(x0+inset-4, y0+r, W-inset*2+8, 2);
+  }
+  px2.fillStyle = '#6a3226'; px2.fillRect(x0-4, y0+roofH-2, W+8, 3);       // 檐口
+  const dx = x0 + (HOUSE.doorX-HOUSE.x)*S + 4;
+  px2.fillStyle = '#6a4a2c'; px2.fillRect(dx, y0+H-26, 18, 26);            // 门
+  px2.fillStyle = '#7a5230'; px2.fillRect(dx+2, y0+H-24, 14, 24);
+  px2.fillStyle = '#e8c020'; px2.fillRect(dx+12, y0+H-14, 3, 3);           // 门把
+  for (const wx of [x0+12, x0+W-30]){                                      // 窗
+    px2.fillStyle = '#fff6dc'; px2.fillRect(wx, y0+roofH+10, 20, 16);
+    px2.fillStyle = '#6a4a2c'; px2.fillRect(wx+9, y0+roofH+10, 2, 16); px2.fillRect(wx, y0+roofH+17, 20, 2);
+  }
+  px2.fillStyle = '#8a5a48'; px2.fillRect(x0+W-26, y0+4, 12, 18);          // 烟囱
+  px2.fillStyle = '#5a3a30'; px2.fillRect(x0+W-28, y0+2, 16, 4);
+}
+function drawShop2D(){
+  const x0 = Math.round((SHOP.x-camLeftX())*S), y0 = Math.round((SHOP.y-camTopY())*S);
+  const W = SHOP.w*S, H = SHOP.h*S;
+  px2.fillStyle = '#7a5a34'; px2.fillRect(x0+6, y0+H-30, W-12, 30);        // 摊台
+  px2.fillStyle = '#9c7a48'; px2.fillRect(x0+3, y0+H-34, W-6, 6);          // 台面
+  for (let k=0;k<6;k++){                                                   // 红白棚
+    px2.fillStyle = k%2 ? '#f2e8d8' : '#c0392b';
+    px2.fillRect(x0-6+k*((W+12)/6), y0-14, (W+12)/6, 16);
+  }
+  px2.fillStyle = 'rgba(0,0,0,0.18)'; px2.fillRect(x0-6, y0+2, W+12, 3);
+  px2.fillStyle = '#5a422a'; px2.fillRect(x0-4, y0-6, 4, H-8); px2.fillRect(x0+W, y0-6, 4, H-8); // 柱
+  px2.fillStyle = '#8a6a20'; pxBlob(x0+W/2, y0-24, 9, 9);                  // 金币招牌
+  px2.fillStyle = '#e8c020'; pxBlob(x0+W/2, y0-24, 7, 7);
+  px2.fillStyle = '#c89818'; px2.fillRect(x0+W/2-1, y0-28, 2, 8);
+}
+/* ---- 实体（像素精灵） ---- */
+function drawEntity2D(id, dirName, moving, wx, wy, t, big){
+  const sx = Math.round((wx-camLeftX())*S), sy = Math.round((wy+0.5-camTopY())*S);
+  // 脚底阴影
+  px2.fillStyle = 'rgba(20,16,12,0.28)'; pxBlob(sx, sy-2, big?11:9, 3);
+  const frame = moving ? Math.floor(t*7)%2 : 0;
+  const breathe = (!moving && Math.floor(t*1.6)%2===1) ? 2 : 0; // 待机呼吸（整体起伏 1 美术像素）
+  px2.drawImage(pxCanvas(id, dirName, frame), sx-16, sy-34-breathe, 32, 32);
+}
+/* ---- 主渲染 ---- */
+function render2D(t){
+  if (!px2 || !game) return;
+  px2.fillStyle = '#101c14';
+  px2.fillRect(0, 0, VIEW_W, VIEW_H);
+  if (inHouse){ renderInterior2D(t); return; }
+  const x0 = Math.max(0, Math.floor(camLeftX())), x1 = Math.min(MAP_W-1, Math.ceil(camLeftX()+VIEW_TW));
+  const y0 = Math.max(0, Math.floor(camTopY())), y1 = Math.min(MAP_H-1, Math.ceil(camTopY()+VIEW_TH));
+  for (let y=y0;y<=y1;y++) for (let x=x0;x<=x1;x++) drawTile2D(x, y, game.tile[idx(x,y)]);
+  // 贴地装饰（高草/花，绘制在角色之下）
+  for (let y=y0;y<=y1;y++) for (let x=x0;x<=x1;x++){
+    const d = game.deco[idx(x,y)];
+    if (d===D_TALL) drawTallGrass2D(x,y);
+    else if (d===D_FLOWER) drawFlower2D(x,y);
+  }
+  // 作物
+  for (let y=y0;y<=y1;y++) for (let x=x0;x<=x1;x++){
+    const c = game.crops[idx(x,y)];
+    if (c) drawCrop2D(x, y, c);
+  }
+  // 需要 Y 排序的物体（树/石/建筑/精灵）
+  const items = [];
+  for (let y=y0;y<=Math.min(MAP_H-1,y1+2);y++) for (let x=x0;x<=x1;x++){
+    const d = game.deco[idx(x,y)];
+    if (d===D_TREE) items.push({y:y+1, f:()=>drawTree2D(x,y,false)});
+    else if (d===D_STUMP) items.push({y:y+1, f:()=>drawTree2D(x,y,true)});
+    else if (d===D_ROCK) items.push({y:y+1, f:()=>drawRock2D(x,y)});
+  }
+  items.push({y:HOUSE.y+HOUSE.h, f:drawHouse2D});
+  items.push({y:SHOP.y+SHOP.h, f:drawShop2D});
+  items.push({y:SHOP.y+1.9, f:()=>drawEntity2D('meowth','front',false,SHOP.x+1.8,SHOP.y+1.9,t)});
+  for (const nm of npcMeshes){
+    const n = nm.npc;
+    let dir = nm.dir || 'front', moving = false;
+    if (n.id==='snorlax') dir = 'front';
+    else if (n.target){ moving = true; dir = facingToDir(Math.atan2(n.target[0]+0.5-n.x, n.target[1]+0.5-n.y)); nm.dir = dir; }
+    items.push({y:n.y, f:()=>drawEntity2D(n.id, dir, moving, n.x, n.y, t, n.id==='snorlax')});
+  }
+  for (const wm of wildMeshes){
+    const w = wm.wild;
+    let dir = wm.dir || 'front', moving = false;
+    if (w.target){ moving = true; dir = facingToDir(Math.atan2(w.target[0]+0.5-w.x, w.target[1]+0.5-w.y)); wm.dir = dir; }
+    items.push({y:w.y, f:()=>drawEntity2D(w.id, dir, moving, w.x, w.y, t)});
+  }
+  items.push({y:player.y, f:()=>drawEntity2D(player.form||'ditto', ['back','front','left','right'][player.dir], player.moving, player.x, player.y, t)});
+  items.sort((a,b)=>a.y-b.y);
+  for (const it of items) it.f();
+  // 目标格高亮
+  if (!menuOpen && !dialog && !fishing){
+    const [hx,hy] = facingTile();
+    if (hx>=0 && hy>=0 && hx<MAP_W && hy<MAP_H){
+      px2.strokeStyle = 'rgba(255,215,94,'+(0.55+0.25*Math.sin(t*4)).toFixed(2)+')';
+      px2.lineWidth = 2;
+      px2.strokeRect(Math.round((hx-camLeftX())*S)+1, Math.round((hy-camTopY())*S)+1, S-2, S-2);
+    }
+  }
+  // 钓鱼浮漂 / 咬钩提示
+  if (fishing){
+    const bx = Math.round((fishing.tx+0.5-camLeftX())*S), by = Math.round((fishing.ty+0.5-camTopY())*S);
+    px2.fillStyle = '#e04030'; px2.fillRect(bx-3, by-6, 6, 5);
+    px2.fillStyle = '#f5f0e0'; px2.fillRect(bx-3, by-2, 6, 3);
+    if (fishing.phase==='bite'){
+      const bob = Math.abs(Math.sin(t*10))*4;
+      px2.fillStyle = '#ffd75e';
+      px2.fillRect(bx-2, by-30-bob, 4, 10); px2.fillRect(bx-2, by-18-bob, 4, 4);
+    }
+  }
+  // 氛围粒子：白天花瓣 / 秋落叶 / 夜晚萤火虫
+  if (!inHouse){
+    const isNight = game.time>=1200 || game.time<330;
+    if (isNight){
+      px2.fillStyle = 'rgba(255,233,122,0.85)';
+      for (let k=0;k<12;k++){
+        const sd = hash2(k*13, 7)%1000/1000;
+        const fx2 = camLeftX() + (hash2(k,3)%100)/100*VIEW_TW + Math.sin(t*0.6+sd*9)*1.6;
+        const fy2 = camTopY() + (hash2(k,5)%100)/100*VIEW_TH + Math.sin(t*1.1+sd*7)*0.8;
+        if (Math.floor(t*3+k)%3===0) continue;
+        px2.fillRect(Math.round((fx2-camLeftX())*S), Math.round((fy2-camTopY())*S), 3, 3);
+      }
+    } else if (game.season==='spring' || game.season==='fall'){
+      const col = game.season==='fall' ? 'rgba(208,132,56,0.9)' : 'rgba(242,174,198,0.9)';
+      px2.fillStyle = col;
+      for (let k=0;k<10;k++){
+        const sd = (hash2(k*31, 11)%1000)/1000;
+        const fall = ((t*0.06 + sd) % 1 + 1) % 1;
+        const fx2 = camLeftX() + (hash2(k,3)%100)/100*VIEW_TW + Math.sin(t*0.9+sd*9)*1.2;
+        const fy2 = camTopY() + fall*VIEW_TH;
+        px2.fillRect(Math.round((fx2-camLeftX())*S), Math.round((fy2-camTopY())*S), 3, 3);
+      }
+    }
+  }
+  // 粒子
+  for (const p of particles){
+    px2.fillStyle = p.color;
+    px2.globalAlpha = Math.max(0, 1-p.age/p.ttl);
+    px2.fillRect(Math.round((p.x/16 - camLeftX())*S)-2, Math.round((p.y/16 - camTopY())*S)-2, 4, 4);
+    px2.globalAlpha = 1;
+  }
+}
+function renderInterior2D(t){
+  const ox = Math.round((0-camLeftX())*S), oy = Math.round((0-camTopY())*S);
+  const W = INT_W*S, H = INT_H*S;
+  px2.fillStyle = '#2b2115'; px2.fillRect(0,0,VIEW_W,VIEW_H);
+  px2.fillStyle = '#d8c49a'; px2.fillRect(ox-6, oy-30, W+12, 30);          // 北墙
+  px2.fillStyle = '#cbb691'; px2.fillRect(ox-10, oy-4, 10, H+8); px2.fillRect(ox+W, oy-4, 10, H+8);
+  px2.fillStyle = '#c09a66'; px2.fillRect(ox, oy, W, H);                   // 地板
+  px2.fillStyle = 'rgba(0,0,0,0.08)';
+  for (let r=16;r<H;r+=32) px2.fillRect(ox, oy+r, W, 2);
+  px2.fillStyle = '#9a4a48'; px2.fillRect(ox+W/2-54, oy+H/2-54, 108, 108); // 地毯
+  px2.fillStyle = '#b26055'; px2.fillRect(ox+W/2-35, oy+H/2-35, 70, 70);
+  px2.fillStyle = '#8a6a42';                                               // 门垫
+  px2.fillRect(ox+(INT_DOOR[0]-0.1)*S, oy+(INT_DOOR[1]-0.1)*S, 0.2*S+18, 0.2*S+18);
+  // 床
+  const bx = ox+9*S, by = oy+2*S;
+  px2.fillStyle = '#5a4a78'; px2.fillRect(bx, by, 2*S, S+8);
+  px2.fillStyle = '#6a7ac0'; px2.fillRect(bx+4, by+10, 2*S-8, S-2);
+  px2.fillStyle = '#f0ead8'; px2.fillRect(bx+S+6, by+12, 16, S-8);
+  // 桌
+  const tx2 = ox+3*S, ty2 = oy+3*S;
+  px2.fillStyle = '#6a4a22'; px2.fillRect(tx2+6, ty2+40, 8, 20); px2.fillRect(tx2+S+18, ty2+40, 8, 20);
+  px2.fillStyle = '#9a6a3a'; px2.fillRect(tx2, ty2+18, 2*S, 26);
+  px2.fillStyle = '#e8e4e0'; px2.fillRect(tx2+10, ty2+10, 6, 8);
+  px2.fillStyle = '#c05848'; px2.fillRect(tx2+38, ty2+22, 16, 8);
+  // 落地灯 + 光晕
+  const lx = ox+1*S, ly = oy+1*S;
+  px2.fillStyle = 'rgba(255,214,140,0.10)'; pxBlob(lx+16, ly+40, 90, 70);
+  px2.fillStyle = '#6a4a2c'; px2.fillRect(lx+14, ly+16, 4, 40);
+  px2.fillStyle = '#f2d488'; px2.fillRect(lx+4, ly+2, 24, 16);
+  // 玩家（室内）
+  drawEntity2D(player.form||'ditto', ['back','front','left','right'][player.dir], player.moving, player.x, player.y, t);
+}
+/* ---- 动作动画 + 粒子 ---- */
+function triggerAction(){
+  if (player.form==='squirtle') spawnWater();
+  actionAnim = {form: player.form, t: 0};
+}
+function spawnWater(){
+  if (!px2) return;
+  const [tx,ty] = facingTile();
+  const src = playerWorld();
+  const X = (src.x+MAP_W/2)*16, Y = (src.z+MAP_H/2)*16;
+  const dX = (tx+0.5+MAP_W/2-0.5)*16 - X, dY = (ty+0.5+MAP_H/2-0.5)*16 - Y;
+  for (let i=0;i<10;i++){
+    particles.push({x:X+(Math.random()-0.5)*6, y:Y-10, vx:dX/0.35, vy:-40-Math.random()*20, vz:0, ttl:0.5, age:0, color:'#5ab8e8'});
+  }
+}
+function updateParticles(dt){
+  for (let i=particles.length-1;i>=0;i--){
+    const p = particles[i];
+    p.age += dt;
+    if (p.age >= p.ttl){ particles.splice(i,1); continue; }
+    p.vy += 140*dt;
+    p.x += p.vx*dt; p.y += p.vy*dt;
+  }
+}
+/* 彩色粒子爆发：收割/开垦/种植/敲击的落地反馈（x,z 为世界格坐标，hy 为抬升格数） */
+function spawnBurst(x, y, z, color, n, spread, up){
+  if (!px2) return;
+  const X = (x+MAP_W/2)*16, Y = (z+MAP_H/2)*16 - (y||0.4)*16;
+  for (let i=0;i<n;i++){
+    const a = Math.random()*Math.PI*2, sp = (0.8+Math.random()*1.4)*16;
+    particles.push({x:X+(Math.random()-0.5)*(spread||0.3)*16, y:Y, vx:Math.cos(a)*sp, vy:-(up||2.4)*16, vz:0, ttl:0.55, age:0, color:cssColor(color)});
+  }
+}
+/* 世界坐标 → 屏幕坐标，供 DOM 浮动文字定位（x,z 为世界格坐标） */
+function worldToScreen(x, y, z){
+  return { x:(x - camLeftX())*S, y:(z - camTopY())*S - (y!=null?y:1.2)*S };
+}
+function spawnFloater(text, wx, wz, color, hy){
+  const wrap = $('floaters');
+  if (!wrap) return;
+  const p = worldToScreen(wx, hy!=null?hy:1.2, wz);
+  if (!p) return;
+  const el = document.createElement('span');
+  el.className = 'floater';
+  el.textContent = text;
+  if (color) el.style.color = color;
+  el.style.left = p.x+'px';
+  el.style.top = p.y+'px';
+  wrap.appendChild(el);
+  setTimeout(()=>{ el.remove(); }, 1300);
+}
+
+/* ---- 氛围粒子：春季花瓣 / 秋季落叶 / 夜晚萤火虫 ---- */
+function rebuildAmbient(kind){
+  if (!ambientGroup) return;
+  for (const p of ambientParts){
+    ambientGroup.remove(p.mesh);
+    if (p.mesh.material && p.mesh.material.dispose) p.mesh.material.dispose(); // 氛围材质为独立实例，需手动释放
+  }
+  ambientParts = [];
+  ambientKind = kind;
+  if (kind==='none') return;
+  for (let i=0;i<16;i++){
+    let m;
+    if (kind==='firefly'){
+      m = new THREE.Mesh(GEO.sphere, new THREE.MeshBasicMaterial({color:0xffe97a, transparent:true, opacity:0.9}));
+    } else {
+      m = new THREE.Mesh(GEO.plane, mat(kind==='leaf' ? 0xd08438 : 0xf2aec6, {transparent:true, opacity:0.85, dynamic:true}));
+      m.scale.set(0.16, 0.16, 1);
+    }
+    ambientGroup.add(m);
+    ambientParts.push({mesh:m, bx:(Math.random()*2-1)*11, bz:(Math.random()*2-1)*8, seed:Math.random()*10, spd:0.05+Math.random()*0.06});
+  }
+}
+function updateAmbient(t){
+  if (!ambientGroup || !game) return;
+  if (inHouse){ ambientGroup.visible = false; return; }
+  const isNight = game.time>=1200 || game.time<330;
+  const kind = isNight ? 'firefly' : (game.season==='fall' ? 'leaf' : game.season==='spring' ? 'petal' : 'none');
+  if (kind!==ambientKind) rebuildAmbient(kind);
+  ambientGroup.visible = kind!=='none';
+  if (kind==='none') return;
+  for (const p of ambientParts){
+    if (kind==='firefly'){
+      p.mesh.position.set(
+        camTarget.x + p.bx + Math.sin(t*0.6+p.seed)*2.0,
+        0.55 + Math.sin(t*1.3+p.seed*2)*0.4,
+        camTarget.z + p.bz + Math.cos(t*0.5+p.seed)*2.0);
+      p.mesh.scale.setScalar(0.05+0.045*Math.max(0, Math.sin(t*3.5+p.seed*3)));
+    } else {
+      const f = ((t*p.spd + p.seed) % 1 + 1) % 1;
+      p.mesh.position.set(
+        camTarget.x + p.bx + Math.sin(t*1.1+p.seed)*1.8,
+        4.6 - 4.4*f,
+        camTarget.z + p.bz);
+      p.mesh.rotation.set(t*0.8+p.seed, t*0.6+p.seed, 0);
+    }
+  }
+}
+
+/* ---- 树 / 石头 / 树果的 3D 构建 ---- */
+const TREE_LEAVES = {
+  spring: [0x4e9a3f, 0x5fae4a, 0x71bd57],
+  summer: [0x3d8a33, 0x4e9e3f, 0x5fae49],
+  fall:   [0xc0782c, 0xd29a3c, 0xb05c2a],
+};
+function buildTree3D(tx,ty,stump){
+  const g = new THREE.Group();
+  const px = worldX(tx+0.5), pz = worldZ(ty+0.5);
+  const trunk = part(g,'cyl',0x6b4a2b, 0, 0.4, 0, {sx:0.3, sy:0.8, sz:0.3});
+  if (stump){
+    trunk.scale.set(0.3, 0.3, 0.3);
+    trunk.position.y = 0.12;
+    part(g,'cyl',0x8a6236, 0, 0.24, 0, {sx:0.4, sy:0.06, sz:0.4});
+  } else if (game.season==='winter'){
+    part(g,'sphere',0xdfe8ef, 0, 0.7, 0, {sx:0.5, sy:0.14, sz:0.5});
+    part(g,'sphere',0xdfe8ef, 0, 1.0, 0, {sx:0.35, sy:0.12, sz:0.35});
+  } else {
+    // 用坐标 hash 让每棵树的大小/形态稳定地略有差异
+    const h = hash2(tx,ty);
+    const leaves = TREE_LEAVES[game.season] || TREE_LEAVES.spring;
+    const s = 0.52 + (h%5)*0.05;
+    const a = ((h>>>3)%100)/100*Math.PI*2;
+    part(g,'sphere',leaves[0], 0, 0.92, 0, {sx:s, sy:s*0.9, sz:s});
+    part(g,'sphere',leaves[1], Math.cos(a)*0.2, 1.1+((h>>>5)%3)*0.04, Math.sin(a)*0.2, {sx:s*0.72, sy:s*0.7, sz:s*0.72});
+    part(g,'sphere',leaves[2], Math.cos(a+2.4)*0.22, 1.0, Math.sin(a+2.4)*0.22, {sx:s*0.6, sy:s*0.58, sz:s*0.6});
+  }
+  g.position.set(px, 0, pz);
+  return g;
+}
+function buildRock3D(tx,ty){
+  const g = new THREE.Group();
+  const rock = part(g,'ico',0x7d8188, 0, 0.32, 0, {sx:0.5, sy:0.4, sz:0.5});
+  part(g,'ico',0x94989f, -0.2, 0.5, 0.1, {sx:0.22, sy:0.18, sz:0.22});
+  g.position.set(worldX(tx+0.5), 0, worldZ(ty+0.5));
+  return g;
+}
+function buildTallGrass3D(tx,ty){
+  const g = new THREE.Group();
+  const h = hash2(tx,ty);
+  for (let k=0;k<3;k++){
+    const a = ((h>>>(k*3))%100)/100*Math.PI*2;
+    const r = 0.12+((h>>>(k*5))%10)/100;
+    part(g,'cone', k===0?0x5a9a48:0x6aae54, Math.cos(a)*r, 0.16+((h>>>k)%3)*0.04, Math.sin(a)*r,
+      {sx:0.1, sy:0.3+k*0.05, sz:0.1});
+  }
+  g.position.set(worldX(tx+0.5), 0, worldZ(ty+0.5));
+  return g;
+}
+const FLOWER_COLORS = [0xe86a8a, 0xf2c84a, 0xffffff, 0xc87ae8];
+function buildFlower3D(tx,ty){
+  const g = new THREE.Group();
+  const h = hash2(tx,ty);
+  const c = FLOWER_COLORS[h%FLOWER_COLORS.length];
+  for (let k=0;k<2;k++){
+    const ox = ((h>>>(k*4))%20)/10-1, oz = ((h>>>(k*7))%20)/10-1;
+    part(g,'cyl',0x4e8a3c, ox*0.22, 0.12, oz*0.22, {sx:0.04, sy:0.24, sz:0.04});
+    part(g,'sphere',c, ox*0.22, 0.28, oz*0.22, {sx:0.09, sy:0.07, sz:0.09});
+    part(g,'sphere',0xf2d050, ox*0.22, 0.3, oz*0.22, {sx:0.04, sy:0.04, sz:0.04});
+  }
+  g.position.set(worldX(tx+0.5), 0, worldZ(ty+0.5));
+  return g;
+}
+function buildCrop3D(tx,ty,crop){
+  const g = new THREE.Group();
+  const c = CROPS[crop.type];
+  const prog = crop.rem<=0 ? 1 : 1 - crop.rem/c.days;
+  const stage = crop.rem<=0 ? 3 : (prog<0.3?0 : prog<0.6?1 : 2);
+  if (stage===0){
+    part(g,'cyl',0x4a9a2f, 0, 0.08, 0, {sx:0.08, sy:0.16, sz:0.08});
+    part(g,'cone',0x6cbf3f, -0.08, 0.2, 0, {sx:0.12, sy:0.12, sz:0.12});
+    part(g,'cone',0x6cbf3f, 0.08, 0.2, 0, {sx:0.12, sy:0.12, sz:0.12});
+  } else if (stage===1){
+    part(g,'sphere',0x4a9a2f, 0, 0.18, 0, {sx:0.3, sy:0.24, sz:0.3});
+    part(g,'sphere',0x5fae36, 0, 0.28, 0, {sx:0.18, sy:0.16, sz:0.18});
+  } else if (stage===2){
+    part(g,'sphere',0x3f8a26, 0, 0.28, 0, {sx:0.42, sy:0.34, sz:0.42});
+    part(g,'sphere',0x5fae36, 0, 0.4, 0, {sx:0.24, sy:0.2, sz:0.24});
+  } else {
+    part(g,'sphere',0x3f8a26, 0, 0.28, 0, {sx:0.46, sy:0.36, sz:0.46});
+    part(g,'sphere',0x5fae36, 0, 0.42, 0, {sx:0.28, sy:0.22, sz:0.28});
+    const berry = part(g,'sphere',c.berry, 0, 0.58, 0, {sx:0.2, sy:0.2, sz:0.2});
+    part(g,'sphere',c.berry, -0.16, 0.5, 0.08, {sx:0.15, sy:0.15, sz:0.15});
+    part(g,'sphere',c.berry, 0.16, 0.5, -0.06, {sx:0.15, sy:0.15, sz:0.15});
+    g.userData.berry = berry;
+  }
+  g.position.set(worldX(tx+0.5), 0, worldZ(ty+0.5));
+  return g;
+}
+
+/* ---- 世界 3D 刷新 ---- */
+function applyWorldVisibility(){
+  if (farmGroup) farmGroup.visible = !inHouse;
+  if (interiorGroup) interiorGroup.visible = inHouse;
+}
+function refreshWorld3D(){
+  if (!GEO || !farmGroup) return;
+  refreshGroundColors();
+  rebuildDeco3D();
+  rebuildCrop3D();
+  applyWorldVisibility();
+  updateFx();
+}
+function rebuildDeco3D(){
+  for (const m of treeMeshes.values()) decoGroup.remove(m);
+  for (const m of rockMeshes.values()) decoGroup.remove(m);
+  for (const m of plantMeshes.values()) decoGroup.remove(m);
+  treeMeshes.clear(); rockMeshes.clear(); plantMeshes.clear();
+  for (let y=0;y<MAP_H;y++) for (let x=0;x<MAP_W;x++){
+    const i = idx(x,y), d = game.deco[i];
+    if (d===D_TREE){ const m = buildTree3D(x,y,false); decoGroup.add(m); treeMeshes.set(i,m); }
+    else if (d===D_STUMP){ const m = buildTree3D(x,y,true); decoGroup.add(m); treeMeshes.set(i,m); }
+    else if (d===D_ROCK){ const m = buildRock3D(x,y); decoGroup.add(m); rockMeshes.set(i,m); }
+    else if (d===D_TALL){ const m = buildTallGrass3D(x,y); decoGroup.add(m); plantMeshes.set(i,m); }
+    else if (d===D_FLOWER){ const m = buildFlower3D(x,y); decoGroup.add(m); plantMeshes.set(i,m); }
+  }
+}
+function updateDeco3D(tx,ty){
+  if (!GEO) return;
+  const i = idx(tx,ty), d = game.deco[i];
+  if (treeMeshes.has(i)){ decoGroup.remove(treeMeshes.get(i)); treeMeshes.delete(i); }
+  if (rockMeshes.has(i)){ decoGroup.remove(rockMeshes.get(i)); rockMeshes.delete(i); }
+  if (plantMeshes.has(i)){ decoGroup.remove(plantMeshes.get(i)); plantMeshes.delete(i); }
+  if (d===D_TREE||d===D_STUMP){ const m = buildTree3D(tx,ty,d===D_STUMP); decoGroup.add(m); treeMeshes.set(i,m); }
+  else if (d===D_ROCK){ const m = buildRock3D(tx,ty); decoGroup.add(m); rockMeshes.set(i,m); }
+  else if (d===D_TALL){ const m = buildTallGrass3D(tx,ty); decoGroup.add(m); plantMeshes.set(i,m); }
+  else if (d===D_FLOWER){ const m = buildFlower3D(tx,ty); decoGroup.add(m); plantMeshes.set(i,m); }
+}
+function rebuildCrop3D(){
+  for (const m of cropMeshes.values()) cropGroup.remove(m);
+  cropMeshes.clear();
+  for (let i=0;i<game.crops.length;i++){
+    const c = game.crops[i];
+    if (!c) continue;
+    const x = i%MAP_W, y = Math.floor(i/MAP_W);
+    const m = buildCrop3D(x,y,c);
+    cropGroup.add(m);
+    cropMeshes.set(i,m);
+  }
+}
+function updateCrop3D(tx,ty){
+  if (!GEO) return;
+  const i = idx(tx,ty);
+  if (cropMeshes.has(i)){ cropGroup.remove(cropMeshes.get(i)); cropMeshes.delete(i); }
+  const c = game.crops[i];
+  if (c){ const m = buildCrop3D(tx,ty,c); cropGroup.add(m); cropMeshes.set(i,m); }
+}
+
+/* ---- 昼夜/天气覆盖 ---- */
+function updateFx(){
+  const t = game ? game.time : 6*60;
+  let bg = 'rgba(0,0,0,0)';
+  if (t < 430){ const k=(430-t)/70; bg = 'rgba(255,150,70,'+(0.2*k).toFixed(3)+')'; }
+  else if (t >= 1080){
+    if (t < 1200){ const k=(t-1080)/120; bg = 'rgba(255,130,50,'+(0.1+0.18*k).toFixed(3)+')'; }
+    else if (t < 1440){ const k=(t-1200)/240; bg = 'rgba(30,25,80,'+(0.18+0.2*k).toFixed(3)+')'; }
+    else { const k=(t-1440)/120; bg = 'rgba(20,18,60,'+Math.min(0.5,0.38+0.12*k).toFixed(3)+')'; }
+  }
+  $('fx').style.background = bg;
+  $('rain').style.display = (game && game.weather==='rain') ? 'block':'none';
+  $('snow').style.display = (game && game.weather==='snow') ? 'block':'none';
+  // 天空颜色随季节 + 昼夜（白天/黄昏/夜晚）；室内用暗色背景增强封闭感
+  if (renderer && game){
+    const c = new THREE.Color(0x2b2115);
+    if (!inHouse){
+      const daySky = {spring:0x8fd0f0, summer:0x7ec8f0, fall:0xe8c090, winter:0xcfe0ea}[game.season] || 0x7ec8f0;
+      c.set(daySky);
+      const t = game.time;
+      if (t >= 1050 && t < 1170) c.lerp(new THREE.Color(0xe0956a), (t-1050)/120);       // 黄昏
+      else if (t >= 1170 || t < 270) c.set(0x17203a);                                   // 夜晚
+      else if (t >= 270 && t < 390) c.lerp(new THREE.Color(0xe0956a), 1-(t-270)/120);   // 黎明
+    }
+    renderer.setClearColor(c.getHex());
+    if (scene.fog) scene.fog.color.copy(c);
+  }
+}
+
+/* ---- 相机跟随 ---- */
+function setZoom(scale){
+  if (!camera) return;
+  const h = CAM_H * scale;
+  camera.top = h; camera.bottom = -h;
+  camera.left = -h*ASPECT; camera.right = h*ASPECT;
+  camera.updateProjectionMatrix();
+}
+function applyCamera(){
+  if (!camera) return; // 2D 像素模式下无 3D 相机，camTarget 由 updateCamera2D 驱动
+  camera.position.set(camTarget.x, CAM_OFF.y, camTarget.z + CAM_OFF.z);
+  camera.lookAt(camTarget.x, 0, camTarget.z);
+}
+function snapCamera(){
+  if (!camera) return;
+  if (inHouse){ camTarget.x = 0; camTarget.z = 0; setZoom(0.55); }
+  else { camTarget.x = clamp(playerWorld().x, -CLAMP_X, CLAMP_X); camTarget.z = clamp(playerWorld().z, -CLAMP_Z, CLAMP_Z); setZoom(1); }
+  applyCamera();
+}
+function updateCamera(dt){
+  if (!camera) return;
+  if (inHouse){
+    camTarget.x = 0; camTarget.z = 0;
+  } else {
+    const pw = playerWorld();
+    let tx = camTarget.x, tz = camTarget.z;
+    const dx = pw.x - camTarget.x, dz = pw.z - camTarget.z;
+    if (Math.abs(dx) > DEAD_X) tx = pw.x - Math.sign(dx)*DEAD_X;
+    if (Math.abs(dz) > DEAD_Z) tz = pw.z - Math.sign(dz)*DEAD_Z;
+    const k = Math.min(1, dt*8);
+    camTarget.x += (tx - camTarget.x)*k;
+    camTarget.z += (tz - camTarget.z)*k;
+    camTarget.x = clamp(camTarget.x, -CLAMP_X, CLAMP_X);
+    camTarget.z = clamp(camTarget.z, -CLAMP_Z, CLAMP_Z);
+  }
+  applyCamera();
+}
+
+/* ---- 更新 3D ---- */
+function update3D(dt, t){
+  if (!renderer || !game) return;
+  updateCamera(dt);
+  // 玩家位置（像素精灵：朝向决定贴图，走路双帧）
+  const pw = playerWorld();
+  playerMesh.position.set(pw.x, 0, pw.z);
+  setSpriteFacing(playerMesh, ['back','front','left','right'][player.dir]);
+  playerMesh.userData.moving = player.moving;
+  animateModel(playerMesh, t);
+  // 变身过渡缩放
+  const scale = 1 + Math.sin(Math.min(1,(actionAnim?actionAnim.t:1)/0.3)*Math.PI)*0.08;
+  playerMesh.scale.set(scale, 1 + (scale-1)*0.4, scale);
+  if (actionAnim){
+    actionAnim.t += dt;
+    if (actionAnim.t > 0.5) actionAnim = null;
+  }
+  // NPC（像素精灵：移动方向决定朝向贴图）
+  for (const nm of npcMeshes){
+    const n = nm.npc;
+    const px0 = nm.group.position.x, pz0 = nm.group.position.z;
+    nm.group.position.set(worldX(n.x), 0, worldZ(n.y));
+    const mdx = nm.group.position.x - px0, mdz = nm.group.position.z - pz0;
+    const moving = mdx*mdx + mdz*mdz > 1e-8;
+    if (moving) nm.face = Math.atan2(mdx, mdz);
+    nm.group.userData.moving = moving;
+    setSpriteFacing(nm.group, n.id==='snorlax' ? 'front' : (nm.face!=null ? facingToDir(nm.face) : 'front'));
+    animateModel(nm.group, t + (n.id.length));
+  }
+  // 野生宝可梦
+  for (const wm of wildMeshes){
+    const w = wm.wild;
+    const px0 = wm.group.position.x, pz0 = wm.group.position.z;
+    wm.group.position.set(worldX(w.x), 0, worldZ(w.y));
+    const mdx = wm.group.position.x - px0, mdz = wm.group.position.z - pz0;
+    const moving = mdx*mdx + mdz*mdz > 1e-8;
+    if (moving) wm.face = Math.atan2(mdx, mdz);
+    wm.group.userData.moving = moving;
+    setSpriteFacing(wm.group, wm.face!=null ? facingToDir(wm.face) : 'front');
+    animateModel(wm.group, t + 3);
+  }
+  // 喵喵（店主持正面站姿）
+  if (meowthMesh){ meowthMesh.userData.moving = false; animateModel(meowthMesh, t+7); }
+  // 树果成熟微光
+  waterT += dt;
+  for (const [i,m] of cropMeshes){
+    const c = game.crops[i];
+    if (c && c.rem<=0 && m.userData.berry){
+      m.userData.berry.scale.setScalar(0.2 + Math.sin(waterT*4 + i)*0.03);
+    }
+  }
+  // 目标格高亮
+  if (tileHighlight){
+    let show = !inHouse && !menuOpen && !dialog;
+    if (show){
+      const [tx,ty] = facingTile();
+      if (tx>=0 && ty>=0 && tx<MAP_W && ty<MAP_H){
+        tileHighlight.position.x = worldX(tx+0.5);
+        tileHighlight.position.z = worldZ(ty+0.5);
+        tileHighlight.material.opacity = 0.2+0.1*Math.sin(t*3);
+        tileHighlight.visible = true;
+      } else show = false;
+    }
+    if (!show) tileHighlight.visible = false;
+  }
+  // 钓鱼浮漂 / 咬钩标记
+  if (bobber){
+    bobber.visible = !!fishing;
+    if (fishing){
+      bobber.position.set(worldX(fishing.tx+0.5), 0.05+Math.sin(t*3)*0.03, worldZ(fishing.ty+0.5));
+      if (fishing.phase==='bite') bobber.position.y = 0.1+Math.abs(Math.sin(t*14))*0.12;
+    }
+  }
+  if (biteMark){
+    biteMark.visible = !!(fishing && fishing.phase==='bite');
+    if (biteMark.visible){
+      const pw2 = playerWorld();
+      biteMark.position.set(pw2.x, 1.9+Math.sin(t*9)*0.1, pw2.z);
+      biteMark.rotation.y += dt*2.5;
+    }
+  }
+  updateAmbient(t);
+  updateParticles(dt);
+}
+function playerWorld(){
+  if (inHouse) return {x: player.x-INT_W/2, z: player.y-INT_H/2};
+  return {x: worldX(player.x), z: worldZ(player.y)};
+}
+
+/* ---------------- 更新（模拟） ---------------- */
+let timeHudShown = '';
+function update(dt){
+  if (!game || forceSleeping) return;
+  game.time += 15*dt;
+  if (game.time >= 26*60){
+    game.time = 26*60;
+    sfx('sleep');
+    sleep(true);
+    return;
+  }
+  if (fishing){
+    fishing.t += dt;
+    if (fishing.phase==='wait' && fishing.t>=fishing.biteAt){
+      fishing.phase = 'bite'; sfx('splash');
+      toast('❗ 咬钩了！快按 空格/E！');
+    } else if (fishing.phase==='bite' && fishing.t>=fishing.biteAt+1.15+(hasSkill('angler')?0.8:0)){
+      fishing = null; toast('鱼跑掉了…'); sfx('error');
+    }
+  }
+  movePlayer(dt);
+  updateNPCs(dt);
+  const nowStr = fmtTime(game.time);
+  if (nowStr !== timeHudShown){ timeHudShown = nowStr; updateHud(); updateFx(); }
+}
+function movePlayer(dt){
+  if (dialog || menuOpen || fishing) return;
+  let dx=0, dy=0;
+  if (keys['arrowleft']||keys['a']) dx=-1;
+  else if (keys['arrowright']||keys['d']) dx=1;
+  if (keys['arrowup']||keys['w']) dy=-1;
+  else if (keys['arrowdown']||keys['s']) dy=1;
+  if (dx||dy){
+    if (dx!==0) player.dir = dx>0?3:2;
+    if (dy!==0) player.dir = dy>0?1:0;
+    if (!player.moving){
+      const cx = Math.floor(player.x), cy = Math.floor(player.y);
+      const nx = cx+dx, ny = cy+dy;
+      if (!isSolid(nx,ny)){ player.moving = true; player.mx = nx+0.5; player.my = ny+0.5; }
+    }
+  }
+  if (player.moving){
+    const baseSpd = 3.4 * (learnedWild('pidgey') ? 1.25 : 1); // 波波「顺风」
+    const spd = ((keys['shift'] && hasSkill('dash')) ? baseSpd*1.6 : baseSpd)*dt; // 电光一闪冲刺
+    const ax = player.mx - player.x, ay = player.my - player.y;
+    const dist = Math.hypot(ax,ay);
+    if (dist <= spd){ player.x = player.mx; player.y = player.my; player.moving = false; }
+    else { player.x += ax/dist*spd; player.y += ay/dist*spd; player.walkT += dt; }
+    player.stepT = (player.stepT||0) + dt;
+    const stepGap = (keys['shift'] && hasSkill('dash')) ? 0.2 : 0.3;
+    if (player.stepT >= stepGap){ player.stepT = 0; sfx('step'); }
+  } else { player.walkT = 0; player.stepT = 0; }
+}
+function updateNPCs(dt){
+  if (inHouse) return;
+  for (const n of game.npcs){
+    if (n.id==='snorlax') continue;
+    if (n.wait>0){ n.wait -= dt; if (n.wait<=0) pickNPCTarget(n); continue; }
+    if (!n.target){ n.wait = 1+Math.random()*3; continue; }
+    const tx = n.target[0]+0.5, ty = n.target[1]+0.5;
+    const ax = tx-n.x, ay = ty-n.y;
+    const dist = Math.hypot(ax,ay);
+    const spd = 2.2*dt;
+    if (dist <= spd){ n.x = tx; n.y = ty; n.target = null; n.wait = 2+Math.random()*4; }
+    else { n.x += ax/dist*spd; n.y += ay/dist*spd; }
+  }
+  // 野生宝可梦：小范围游走
+  for (const w of game.wilds||[]){
+    if (w.wait>0){ w.wait -= dt; if (w.wait<=0) pickWildTarget(w); continue; }
+    if (!w.target){ w.wait = 1+Math.random()*2; continue; }
+    const tx = w.target[0]+0.5, ty = w.target[1]+0.5;
+    const ax = tx-w.x, ay = ty-w.y;
+    const dist = Math.hypot(ax,ay);
+    const spd = 1.4*dt;
+    if (dist <= spd){ w.x = tx; w.y = ty; w.target = null; w.wait = 1.5+Math.random()*3; }
+    else { w.x += ax/dist*spd; w.y += ay/dist*spd; }
+  }
+}
+function pickWildTarget(w){
+  for (let tries=0; tries<20; tries++){
+    const x = Math.floor(w.x) + Math.floor(Math.random()*11)-5;
+    const y = Math.floor(w.y) + Math.floor(Math.random()*11)-5;
+    if (x<3||y<3||x>=MAP_W-3||y>=MAP_H-3) continue;
+    if (isSolid(x,y)) continue;
+    const i = idx(x,y);
+    if (game.tile[i]!==T_GRASS || game.crops[i]) continue;
+    w.target = [x,y];
+    return;
+  }
+  w.wait = 2+Math.random()*3;
+}
+function pickNPCTarget(n){
+  for (let tries=0; tries<40; tries++){
+    const x = 4+Math.floor(Math.random()*(MAP_W-8));
+    const y = 4+Math.floor(Math.random()*(MAP_H-8));
+    if (!isSolid(x,y) && !npcAt(x,y)){ n.target = [x,y]; return; }
+  }
+  n.wait = 3+Math.random()*4;
+}
+
+/* ---------------- 主循环 ---------------- */
+let lastFrame = 0;
+function frame(now){
+  const dt = Math.min(0.05, (now-lastFrame)/1000 || 0.016);
+  lastFrame = now;
+  try{
+    update(dt);
+    if (USE_PIXEL_2D){
+      updateCamera2D(dt);
+      render2D(now/1000);
+    } else if (renderer){
+      update3D(dt, now/1000);
+      renderer.render(scene, camera);
+    }
+  }catch(e){
+    // 渲染层异常不应杀死整个游戏循环；记录并继续
+    console.error('[frame]', e);
+    window.__frameErrs = (window.__frameErrs||[]);
+    if (window.__frameErrs.length < 20) window.__frameErrs.push(e.message + ' @ ' + (e.stack||'').split('\n')[1]);
+  }
+  requestAnimationFrame(frame);
+}
+
+/* ---------------- 启动 ---------------- */
+function bootSim(){
+  if (hasSave()){ if (!loadGame()) newGame(); } // 读档失败时兜底开新档，避免黑屏
+  else newGame();
+  initGuide(); refreshGuide();
+  updateHud();
+  renderHotbar();
+  updateFx();
+  initTouch();
+  startAmbientAudio();
+  requestAnimationFrame(t => { lastFrame = t; requestAnimationFrame(frame); });
+  setInterval(()=>{ if (game && !inHouse) saveGame(); }, 30000);
+}
+/* Game Boy 式控制甲板（画面下方黑色区域；触屏自动显示，#pad 桌面调试） */
+function initTouch(){
+  const ui = $('touchdeck');
+  if (!ui) return;
+  const isTouch = ('ontouchstart' in window) || (typeof navigator!=='undefined' && (navigator.maxTouchPoints||0) > 0);
+  const force = typeof location!=='undefined' && location.hash==='#pad';
+  if (!isTouch && !force) return;
+  document.body.classList.add('has-pad');
+  ui.classList.remove('hidden');
+  const press = (el, on, off)=>{
+    el.addEventListener('pointerdown', e=>{ e.preventDefault(); e.stopPropagation(); el.classList.add('on'); on(); });
+    const end = e=>{ e.preventDefault(); el.classList.remove('on'); off && off(); };
+    el.addEventListener('pointerup', end);
+    el.addEventListener('pointerleave', end);
+    el.addEventListener('pointercancel', end);
+    el.addEventListener('contextmenu', e=>e.preventDefault());
+  };
+  // 十字键 → 移动
+  ui.querySelectorAll('#tdpad button').forEach(b=>{
+    const k = b.dataset.k;
+    press(b, ()=>{ keys[k] = true; }, ()=>{ keys[k] = false; });
+  });
+  // A 使用 / B 互动 / X 上一件 / Y 下一件
+  const acts = {
+    a: ()=>{ if (!menuOpen && !dialog && !forceSleeping) useSelected(); },
+    b: ()=>{ if (!menuOpen && !dialog && !forceSleeping) interact(); },
+    x: ()=>{ if (!menuOpen && !dialog) cycleSlot(-1); },
+    y: ()=>{ if (!menuOpen && !dialog) cycleSlot(1); },
+  };
+  ui.querySelectorAll('#tbtns button').forEach(b=>{
+    const fn = acts[b.dataset.act];
+    if (fn) press(b, fn);
+  });
+}
+function loadThree(onDone){
+  if (typeof THREE !== 'undefined'){ onDone(true); return; }
+  const head = document.head;
+  if (!head){ return; } // 无 DOM（测试环境）
+  const urls = [
+    'https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js',
+    'https://unpkg.com/three@0.149.0/build/three.min.js',
+    'https://cdn.bootcdn.net/ajax/libs/three.js/0.149.0/three.min.js',
+  ];
+  let i = 0, timer = 0;
+  (function tryNext(){
+    if (i >= urls.length){ onDone(false); return; }
+    const s = document.createElement('script');
+    let finished = false;
+    const finish = (ok) => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timer);
+      s.onload = s.onerror = null;
+      if (ok) onDone(true);
+      else { s.remove(); tryNext(); }
+    };
+    s.src = urls[i++];
+    s.async = true;
+    s.onload = ()=> finish(true);
+    s.onerror = ()=> finish(false);
+    timer = setTimeout(()=> finish(false), 8000); // 单个 CDN 超过 8 秒自动切换
+    head.appendChild(s);
+  })();
+}
+
+bootSim();
+// 全像素 2D 渲染：无需 Three.js / CDN，离线可玩
+(function(){
+  initRender2D();
+  const loading = $('loading');
+  if (loading) loading.style.display = 'none';
+})();
+
+window.addEventListener('beforeunload', ()=>{ if (game) saveGame(); });
+
+/* ---------------- 自测模式（URL 带 #selftest 触发） ----------------
+   在浏览器内运行核心回归断言；开始前备份玩家存档，结束后原样恢复。 */
+function runSelfTest(){
+  const results = [];
+  const ok = (cond, name)=>{ results.push((cond?'✓ ':'✗ FAIL ')+name); return cond; };
+  const eq = (a,b,name)=> ok(a===b, name+'（got='+a+'，want='+b+'）');
+  const rawSave = (()=>{ try{ return localStorage.getItem(SAVE_KEY); }catch(e){ return null; } })();
+  const restore = ()=>{
+    try{
+      if (rawSave){ localStorage.setItem(SAVE_KEY, rawSave); loadGame(); }
+      else { localStorage.removeItem(SAVE_KEY); newGame(); }
+      updateHud(); renderHotbar(); refreshWorld3D(); snapCamera();
+    }catch(e){}
+  };
+  try{
+    newGame(); closeDialog();
+    eq(game.season,'spring','新档季节为春季');
+    eq(game.day,1,'新档第 1 天');
+    eq(game.gold,START_GOLD,'初始金币 '+START_GOLD);
+    // 移动：向上一步
+    const y0 = player.y;
+    keys['w'] = true; movePlayer(0.5); keys['w'] = false;
+    ok(player.y < y0, '按 W 后向上移动');
+    // 开垦 → 种植 → 浇水 → 催熟 → 收获 → 出售
+    let tx=-1, ty=-1;
+    for (let y=12;y<24 && tx<0;y++) for (let x=16;x<34;x++){
+      const i = idx(x,y);
+      if (game.tile[i]===T_GRASS && game.deco[i]===D_NONE && !game.crops[i]){ tx=x; ty=y; break; }
+    }
+    ok(tx>=0, '能找到可开垦的草地');
+    selectSlot(0); useOnTile(tx,ty);
+    eq(game.tile[idx(tx,ty)], T_TILLED, '锄头开垦成功');
+    selectSlot(4); useOnTile(tx,ty);
+    ok(!!game.crops[idx(tx,ty)], '种子种下成功');
+    selectSlot(1); useOnTile(tx,ty);
+    eq(game.watered[idx(tx,ty)], 1, '浇水成功');
+    game.crops[idx(tx,ty)].rem = 0;
+    selectSlot(8); useOnTile(tx,ty);
+    eq(game.stats.harvested, 1, '收获树果 ×1');
+    ok(game.inv.some(s=>s.id==='crop_oran' && s.n>0), '背包获得橙橙果');
+    const gold0 = game.gold;
+    sellItem('crop_oran');
+    ok(game.gold>gold0, '出售后金币增加（'+gold0+'→'+game.gold+'）');
+    ok(game.guide.sell===1, '引导清单记录出售步骤');
+    // 过天与换季
+    advanceDay(false);
+    eq(game.day, 2, '过天后进入第 2 天');
+    game.day = DAYS_PER_SEASON; advanceDay(false);
+    eq(game.season, 'summer', '季节推进到夏季');
+    // 存读档往返
+    saveGame();
+    const goldSnap = game.gold;
+    game.gold = 1;
+    loadGame();
+    eq(game.gold, goldSnap, '读档恢复金币');
+    // 恢复玩家原始存档
+    restore();
+  }catch(e){
+    results.push('✗ FAIL 自测异常：'+e.message);
+    restore();
+  }
+  const pass = results.filter(r=>r.startsWith('✓')).length;
+  const fail = results.length - pass;
+  showDialog('<h3>🧪 自测结果：'+pass+' 通过，'+fail+' 失败</h3><pre style="white-space:pre-wrap;font-size:13px;line-height:1.9">'
+    + results.join('\n') + '</pre>',
+    [{label:'关闭', ghost:true, fn:closeDialog}]);
+  console.log('[selftest]', results.join('\n'));
+}
+if (typeof location!=='undefined' && location.hash==='#selftest'){
+  if (document.readyState==='loading') document.addEventListener('DOMContentLoaded', ()=>setTimeout(runSelfTest, 300));
+  else setTimeout(runSelfTest, 300);
+}
+/* 像素图鉴（#pixelart）：列出全部精灵×三向的原始像素图，便于校对 */
+function showPixelGallery(){
+  let html = '<h3>🎨 像素精灵图鉴（前 / 后 / 侧）</h3><div style="display:flex;flex-wrap:wrap;gap:14px">';
+  for (const id in PIXEL_ART){
+    html += '<div style="text-align:center"><b style="font-size:12px">'+(FORM_NAMES[id]||id)+'</b><br>';
+    for (const dirName of ['front','back','side']){
+      const cnv = pxCanvas(id, dirName, 0);
+      const img = document.createElement('canvas');
+      img.width = 96; img.height = 96;
+      const ictx = img.getContext('2d');
+      ictx.imageSmoothingEnabled = false;
+      ictx.drawImage(cnv, 0, 0, 96, 96);
+      html += '<img src="'+img.toDataURL()+'" style="image-rendering:pixelated;width:48px;height:48px;background:#8a8;margin:1px" title="'+dirName+'">';
+    }
+    html += '</div>';
+  }
+  html += '</div>';
+  showDialog(html, [{label:'关闭', ghost:true, fn:closeDialog}]);
+}
+if (typeof location!=='undefined' && location.hash==='#pixelart'){
+  if (document.readyState==='loading') document.addEventListener('DOMContentLoaded', ()=>setTimeout(showPixelGallery, 300));
+  else setTimeout(showPixelGallery, 300);
+}
+
+/* 测试用 API */
+window.GameAPI = {
+  get state(){ return game; },
+  get player(){ return player; },
+  get inHouse(){ return inHouse; },
+  get dialog(){ return dialog; },
+  get keys(){ return keys; },
+  get renderer(){ return renderer; },
+  get camTarget(){ return camTarget; },
+  get fishing(){ return fishing; },
+  snapCamera, updateCamera,
+  newGame, saveGame, loadGame, advanceDay, sleep,
+  useOnTile, interactAt, addItem, buyItem, sellItem, upgradeTool,
+  selectSlot, cycleSlot, playerTile, closeDialog, catchFish,
+  hasSkill, maxEnergy, slotCount, buySkill, buyBagUpgrade, useSunlight,
+  learnedWild, cycleWildForm, talkWild, wildAt, spawnWilds, addWildFriendship,
+  exportSave, importSave, encodeSaveCode, decodeSaveCode,
+  idx, CROPS, ITEMS, fmtTime,
+  update: (dt)=>{ update(dt); },
+  frameStep: (dt, t)=>{ update(dt); if (USE_PIXEL_2D){ render2D(t||0); } else if (renderer){ update3D(dt, t||0); renderer.render(scene, camera); } },
+  tick: (secs)=>{ const steps = Math.ceil(secs/0.016); for (let i=0;i<steps;i++) update(0.016); },
+};
+</script>
+</body>
+</html>
