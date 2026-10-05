@@ -116,13 +116,19 @@
   #guide .gdone{color:#8fd070;text-decoration:line-through;opacity:.7}
   #guide.out{opacity:0}
   #touchui{position:absolute;inset:0;pointer-events:none;z-index:9}
-  #tdpad{position:absolute;left:14px;bottom:64px;display:grid;grid-template-columns:repeat(3,46px);grid-template-rows:repeat(3,46px);gap:4px}
-  #tdpad button,#tbtns button{pointer-events:auto;opacity:.55;background:rgba(20,28,12,.75);color:#ffe9b0;
-    border:2px solid rgba(255,215,94,.45);border-radius:10px;font-size:19px;font-weight:800;
-    display:flex;align-items:center;justify-content:center;touch-action:none}
-  #tdpad button:active,#tbtns button:active{opacity:.95;background:rgba(80,60,20,.9)}
-  #tbtns{position:absolute;right:14px;bottom:70px;display:flex;flex-direction:column;gap:10px}
-  #tbtns button{width:64px;height:64px;border-radius:50%;font-size:15px}
+  #tdpad{position:absolute;left:14px;bottom:56px;display:grid;grid-template-columns:repeat(3,48px);grid-template-rows:repeat(3,48px);gap:3px}
+  #tbtns{position:absolute;right:14px;bottom:56px;display:grid;grid-template-columns:repeat(3,46px);grid-template-rows:repeat(3,46px);gap:3px}
+  #tdpad button,#tbtns button{pointer-events:auto;opacity:.5;background:rgba(20,28,12,.72);color:#ffe9b0;
+    border:2px solid rgba(255,215,94,.45);border-radius:10px;font-size:18px;font-weight:800;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;touch-action:none;
+    -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;line-height:1}
+  #tdpad button.on,#tbtns button.on,#tdpad button:active,#tbtns button:active{opacity:.95;background:rgba(90,66,20,.92);transform:scale(.94)}
+  #tbtns button{border-radius:50%;font-size:19px}
+  #tbtns button[data-act="a"]{color:#9fe08a;border-color:rgba(140,220,110,.6)}
+  #tbtns button[data-act="b"]{color:#f2a0a0;border-color:rgba(230,130,110,.6)}
+  #tbtns button[data-act="x"]{color:#9ac8f2;border-color:rgba(120,170,240,.6)}
+  #tbtns button[data-act="y"]{color:#f2d488;border-color:rgba(240,200,110,.6)}
+  #tbtns button i{font-style:normal;font-size:9px;font-weight:700;opacity:.8;margin-top:1px}
 </style>
 </head>
 <body>
@@ -155,13 +161,14 @@
 
   <div id="touchui" class="hidden">
     <div id="tdpad">
-      <span></span><button data-k="w">▲</button><span></span>
-      <button data-k="a">◀</button><span></span><button data-k="d">▶</button>
-      <span></span><button data-k="s">▼</button><span></span>
+      <span></span><button data-k="w" aria-label="上">▲</button><span></span>
+      <button data-k="a" aria-label="左">◀</button><span></span><button data-k="d" aria-label="右">▶</button>
+      <span></span><button data-k="s" aria-label="下">▼</button><span></span>
     </div>
     <div id="tbtns">
-      <button data-act="use">使用</button>
-      <button data-act="act">互动</button>
+      <span></span><button data-act="x" aria-label="上一件物品">X<i>上件</i></button><span></span>
+      <button data-act="y" aria-label="下一件物品">Y<i>下件</i></button><span></span><button data-act="a" aria-label="使用">A<i>使用</i></button>
+      <span></span><button data-act="b" aria-label="互动">B<i>互动</i></button><span></span>
     </div>
   </div>
 
@@ -3175,13 +3182,20 @@ let lastFrame = 0;
 function frame(now){
   const dt = Math.min(0.05, (now-lastFrame)/1000 || 0.016);
   lastFrame = now;
-  update(dt);
-  if (USE_PIXEL_2D){
-    updateCamera2D(dt);
-    render2D(now/1000);
-  } else if (renderer){
-    update3D(dt, now/1000);
-    renderer.render(scene, camera);
+  try{
+    update(dt);
+    if (USE_PIXEL_2D){
+      updateCamera2D(dt);
+      render2D(now/1000);
+    } else if (renderer){
+      update3D(dt, now/1000);
+      renderer.render(scene, camera);
+    }
+  }catch(e){
+    // 渲染层异常不应杀死整个游戏循环；记录并继续
+    console.error('[frame]', e);
+    window.__frameErrs = (window.__frameErrs||[]);
+    if (window.__frameErrs.length < 20) window.__frameErrs.push(e.message + ' @ ' + (e.stack||'').split('\n')[1]);
   }
   requestAnimationFrame(frame);
 }
@@ -3199,26 +3213,38 @@ function bootSim(){
   requestAnimationFrame(t => { lastFrame = t; requestAnimationFrame(frame); });
   setInterval(()=>{ if (game && !inHouse) saveGame(); }, 30000);
 }
-/* 触屏虚拟按键（仅触屏设备显示） */
+/* 虚拟手柄（触屏自动显示；#pad 可在桌面强制显示调试） */
 function initTouch(){
   const ui = $('touchui');
   if (!ui) return;
   const isTouch = ('ontouchstart' in window) || (typeof navigator!=='undefined' && (navigator.maxTouchPoints||0) > 0);
-  if (!isTouch) return;
+  const force = typeof location!=='undefined' && location.hash==='#pad';
+  if (!isTouch && !force) return;
   ui.classList.remove('hidden');
+  const press = (el, on, off)=>{
+    el.addEventListener('pointerdown', e=>{ e.preventDefault(); e.stopPropagation(); el.classList.add('on'); on(); });
+    const end = e=>{ e.preventDefault(); el.classList.remove('on'); off && off(); };
+    el.addEventListener('pointerup', end);
+    el.addEventListener('pointerleave', end);
+    el.addEventListener('pointercancel', end);
+    el.addEventListener('contextmenu', e=>e.preventDefault());
+  };
+  // 十字键 → 移动
   ui.querySelectorAll('#tdpad button').forEach(b=>{
     const k = b.dataset.k;
-    const on = e=>{ e.preventDefault(); keys[k] = true; };
-    const off = e=>{ e.preventDefault(); keys[k] = false; };
-    b.addEventListener('pointerdown', on);
-    b.addEventListener('pointerup', off);
-    b.addEventListener('pointerleave', off);
-    b.addEventListener('pointercancel', off);
+    press(b, ()=>{ keys[k] = true; }, ()=>{ keys[k] = false; });
   });
-  const useBtn = ui.querySelector('[data-act="use"]');
-  const actBtn = ui.querySelector('[data-act="act"]');
-  useBtn.addEventListener('pointerdown', e=>{ e.preventDefault(); if (!menuOpen && !dialog && !forceSleeping) useSelected(); });
-  actBtn.addEventListener('pointerdown', e=>{ e.preventDefault(); if (!menuOpen && !dialog && !forceSleeping) interact(); });
+  // A 使用 / B 互动 / X 上一件 / Y 下一件
+  const acts = {
+    a: ()=>{ if (!menuOpen && !dialog && !forceSleeping) useSelected(); },
+    b: ()=>{ if (!menuOpen && !dialog && !forceSleeping) interact(); },
+    x: ()=>{ if (!menuOpen && !dialog) cycleSlot(-1); },
+    y: ()=>{ if (!menuOpen && !dialog) cycleSlot(1); },
+  };
+  ui.querySelectorAll('#tbtns button').forEach(b=>{
+    const fn = acts[b.dataset.act];
+    if (fn) press(b, fn);
+  });
 }
 function loadThree(onDone){
   if (typeof THREE !== 'undefined'){ onDone(true); return; }
