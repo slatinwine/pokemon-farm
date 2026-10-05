@@ -115,20 +115,32 @@
   #guide h4{color:#ffd75e;font-size:13px;margin-bottom:2px;letter-spacing:1px}
   #guide .gdone{color:#8fd070;text-decoration:line-through;opacity:.7}
   #guide.out{opacity:0}
-  #touchui{position:absolute;inset:0;pointer-events:none;z-index:9}
-  #tdpad{position:absolute;left:14px;bottom:56px;display:grid;grid-template-columns:repeat(3,48px);grid-template-rows:repeat(3,48px);gap:3px}
-  #tbtns{position:absolute;right:14px;bottom:56px;display:grid;grid-template-columns:repeat(3,46px);grid-template-rows:repeat(3,46px);gap:3px}
-  #tdpad button,#tbtns button{pointer-events:auto;opacity:.5;background:rgba(20,28,12,.72);color:#ffe9b0;
-    border:2px solid rgba(255,215,94,.45);border-radius:10px;font-size:18px;font-weight:800;
+  /* ---------- Game Boy 式控制甲板（画面下方，触屏/#pad 时显示） ---------- */
+  #touchdeck{display:none;justify-content:space-between;align-items:center;
+    width:min(97vw,960px);padding:12px 20px;border-radius:16px;
+    background:linear-gradient(180deg,#232d1a,#141c0e);border:2px solid rgba(255,215,94,.22);
+    box-shadow:0 10px 30px rgba(0,0,0,.5)}
+  body.has-pad{flex-direction:column;gap:12px}
+  body.has-pad #wrap{width:min(97vw,960px,calc((100vh - 205px)*1.5))}
+  body.has-pad #touchdeck{display:flex}
+  #tdpad{display:grid;grid-template-columns:repeat(3,54px);grid-template-rows:repeat(3,54px);gap:4px}
+  #tbtns{display:grid;grid-template-columns:repeat(3,52px);grid-template-rows:repeat(3,52px);gap:4px}
+  #tdpad button,#tbtns button{pointer-events:auto;background:linear-gradient(180deg,#3a4428,#242c18);color:#ffe9b0;
+    border:2px solid rgba(255,215,94,.4);border-radius:12px;font-size:20px;font-weight:800;
     display:flex;flex-direction:column;align-items:center;justify-content:center;touch-action:none;
-    -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;line-height:1}
-  #tdpad button.on,#tbtns button.on,#tdpad button:active,#tbtns button:active{opacity:.95;background:rgba(90,66,20,.92);transform:scale(.94)}
-  #tbtns button{border-radius:50%;font-size:19px}
+    -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;line-height:1;
+    box-shadow:0 3px 0 rgba(0,0,0,.45)}
+  #tdpad button.on,#tbtns button.on,#tdpad button:active,#tbtns button:active{transform:translateY(2px);box-shadow:0 1px 0 rgba(0,0,0,.45);filter:brightness(1.3)}
+  #tbtns button{border-radius:50%}
   #tbtns button[data-act="a"]{color:#9fe08a;border-color:rgba(140,220,110,.6)}
   #tbtns button[data-act="b"]{color:#f2a0a0;border-color:rgba(230,130,110,.6)}
   #tbtns button[data-act="x"]{color:#9ac8f2;border-color:rgba(120,170,240,.6)}
   #tbtns button[data-act="y"]{color:#f2d488;border-color:rgba(240,200,110,.6)}
   #tbtns button i{font-style:normal;font-size:9px;font-weight:700;opacity:.8;margin-top:1px}
+  #tmid{display:flex;align-items:center;justify-content:center}
+  #tmid .grille{width:90px;height:44px;border-radius:10px;
+    background:repeating-linear-gradient(180deg,#2c3620 0 5px,#1a2212 5px 10px);
+    border:2px solid rgba(255,215,94,.18)}
 </style>
 </head>
 <body>
@@ -159,19 +171,6 @@
   <div id="guide" class="hidden"></div>
   <div id="fade"></div>
 
-  <div id="touchui" class="hidden">
-    <div id="tdpad">
-      <span></span><button data-k="w" aria-label="上">▲</button><span></span>
-      <button data-k="a" aria-label="左">◀</button><span></span><button data-k="d" aria-label="右">▶</button>
-      <span></span><button data-k="s" aria-label="下">▼</button><span></span>
-    </div>
-    <div id="tbtns">
-      <span></span><button data-act="x" aria-label="上一件物品">X<i>上件</i></button><span></span>
-      <button data-act="y" aria-label="下一件物品">Y<i>下件</i></button><span></span><button data-act="a" aria-label="使用">A<i>使用</i></button>
-      <span></span><button data-act="b" aria-label="互动">B<i>互动</i></button><span></span>
-    </div>
-  </div>
-
   <div id="dialog" class="hidden">
     <div id="dlg-box"><div id="dlg-text"></div><div id="dlg-actions"></div></div>
   </div>
@@ -193,7 +192,22 @@
     </div>
   </div>
 
-  <div id="loading">正在加载 3D 渲染器…</div>
+  <div id="loading">加载中…</div>
+</div>
+
+<!-- Game Boy 式控制甲板：位于画面下方黑色区域（触屏/ #pad 时显示） -->
+<div id="touchdeck" class="hidden">
+  <div id="tdpad">
+    <span></span><button data-k="w" aria-label="上">▲</button><span></span>
+    <button data-k="a" aria-label="左">◀</button><span></span><button data-k="d" aria-label="右">▶</button>
+    <span></span><button data-k="s" aria-label="下">▼</button><span></span>
+  </div>
+  <div id="tmid"><span class="grille"></span></div>
+  <div id="tbtns">
+    <span></span><button data-act="x" aria-label="上一件物品">X<i>上件</i></button><span></span>
+    <button data-act="y" aria-label="下一件物品">Y<i>下件</i></button><span></span><button data-act="a" aria-label="使用">A<i>使用</i></button>
+    <span></span><button data-act="b" aria-label="互动">B<i>互动</i></button><span></span>
+  </div>
 </div>
 
 <script>
@@ -3213,13 +3227,14 @@ function bootSim(){
   requestAnimationFrame(t => { lastFrame = t; requestAnimationFrame(frame); });
   setInterval(()=>{ if (game && !inHouse) saveGame(); }, 30000);
 }
-/* 虚拟手柄（触屏自动显示；#pad 可在桌面强制显示调试） */
+/* Game Boy 式控制甲板（画面下方黑色区域；触屏自动显示，#pad 桌面调试） */
 function initTouch(){
-  const ui = $('touchui');
+  const ui = $('touchdeck');
   if (!ui) return;
   const isTouch = ('ontouchstart' in window) || (typeof navigator!=='undefined' && (navigator.maxTouchPoints||0) > 0);
   const force = typeof location!=='undefined' && location.hash==='#pad';
   if (!isTouch && !force) return;
+  document.body.classList.add('has-pad');
   ui.classList.remove('hidden');
   const press = (el, on, off)=>{
     el.addEventListener('pointerdown', e=>{ e.preventDefault(); e.stopPropagation(); el.classList.add('on'); on(); });
