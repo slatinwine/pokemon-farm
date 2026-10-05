@@ -1716,6 +1716,11 @@ const CAM_OFF = {y:26, z:20};   // 相机相对注视点的偏移（决定俯视
 const DEAD_X = 8, DEAD_Z = 6;   // 跟随死区（玩家可偏离中心的格数）
 const CLAMP_X = 8, CLAMP_Z = 5; // 相机中心夹取范围（保证视野不出农场）
 let camTarget = {x:0, z:0};
+// 可选 URL 参数 ?zoom=0.3：固定镜头缩放（建模拟点检查/截图用）
+const URL_ZOOM = (()=>{ try{
+  const m = (typeof location!=='undefined'?location.search:'').match(/[?&]zoom=([\d.]+)/);
+  return m ? Math.min(1.5, Math.max(0.15, +m[1])) : null;
+}catch(e){ return null; } })();
 
 const matCache = new Map();
 function mat(color, o){
@@ -2015,21 +2020,31 @@ function addFace(g, eyeColor, opts){
   opts = opts||{};
   const ey = opts.ey!=null?opts.ey:0.3, ez = opts.ez!=null?opts.ez:0.3, ex = opts.ex!=null?opts.ex:0.16;
   const s = opts.s||0.09;
-  const left = part(g,'sphere',0x222222, -ex, ey, ez, {sx:s, sy:s, sz:s});
-  const right = part(g,'sphere',0x222222, ex, ey, ez, {sx:s, sy:s, sz:s});
-  if (opts.white){
-    part(g,'sphere',0xffffff, -ex, ey+0.02, ez+s*0.7, {sx:s*0.45, sy:s*0.45, sz:s*0.3});
-    part(g,'sphere',0xffffff, ex, ey+0.02, ez+s*0.7, {sx:s*0.45, sy:s*0.45, sz:s*0.3});
+  if (opts.white){ // 眼白在瞳孔后一圈，圆润卡通眼
+    part(g,'sphere',0xffffff, -ex, ey, ez-s*0.3, {sx:s*1.2, sy:s*1.2, sz:s*0.6});
+    part(g,'sphere',0xffffff, ex, ey, ez-s*0.3, {sx:s*1.2, sy:s*1.2, sz:s*0.6});
   }
+  const left = part(g,'sphere',0x1a1a1a, -ex, ey, ez, {sx:s, sy:s, sz:s*0.65});
+  const right = part(g,'sphere',0x1a1a1a, ex, ey, ez, {sx:s, sy:s, sz:s*0.65});
+  // 高光点：让眼睛"有神"的关键
+  part(g,'sphere',0xffffff, -ex-s*0.28, ey+s*0.3, ez+s*0.45, {sx:s*0.3, sy:s*0.3, sz:s*0.18});
+  part(g,'sphere',0xffffff, ex-s*0.28, ey+s*0.3, ez+s*0.45, {sx:s*0.3, sy:s*0.3, sz:s*0.18});
   if (opts.cheek){
-    part(g,'sphere',opts.cheek, -ex-s*0.5, ey-s*0.5, ez-0.04, {sx:s*0.7, sy:s*0.55, sz:s*0.4});
-    part(g,'sphere',opts.cheek, ex+s*0.5, ey-s*0.5, ez-0.04, {sx:s*0.7, sy:s*0.55, sz:s*0.4});
+    part(g,'sphere',opts.cheek, -ex-s*0.85, ey-s*0.8, ez+0.06, {sx:s*0.75, sy:s*0.58, sz:s*0.4});
+    part(g,'sphere',opts.cheek, ex+s*0.85, ey-s*0.8, ez+0.06, {sx:s*0.75, sy:s*0.58, sz:s*0.4});
   }
-  if (opts.smile){
-    const m = part(g,'torus',0x5a3a28, 0, ey-s*1.4, ez+0.02, {sx:0.5, sy:0.6, sz:0.4});
-    m.rotation.z = 0; m.rotation.x = Math.PI/2; m.rotation.y = 0;
+  if (opts.smile){ // 小张嘴（深色椭圆，比圆环嘴可爱）
+    part(g,'sphere',0x5a3428, 0, opts.mouthY!=null?opts.mouthY:ey-s*1.6, ez+s*0.1, {sx:s*0.95, sy:s*0.5, sz:s*0.35});
+  }
+  if (opts.nose){
+    part(g,'sphere',opts.nose, 0, opts.noseY!=null?opts.noseY:ey-s*0.7, ez+s*0.62, {sx:s*0.32, sy:s*0.24, sz:s*0.26});
   }
   return {left, right};
+}
+/* 耳朵：外耳锥 + 前侧内耳（深色），告别"光杆圆锥" */
+function addEar(g, x, y, z, sx, sy, sz, outer, inner, rz){
+  part(g,'cone',outer, x,y,z, {sx, sy, sz, rz: rz||0});
+  if (inner) part(g,'cone',inner, x, y+sy*0.02, z+sz*0.32, {sx:sx*0.5, sy:sy*0.5, sz:sz*0.4, rz: rz||0});
 }
 /* 脚下半透明阴影盘：共享几何与材质，给精灵接地感 */
 const POKEMON_SHADOW_R = {ditto:0.4, diglett:0.32, squirtle:0.42, scyther:0.38, geodude:0.44,
@@ -2048,29 +2063,41 @@ function buildPokemon(id){
   g.userData.id = id;
   switch(id){
     case 'ditto': {
-      const body = part(g,'sphere',0xd99cc8, 0, 0.45, 0, {sx:0.55, sy:0.48, sz:0.5});
-      part(g,'sphere',0xc78bc0, 0, 0.28, 0.05, {sx:0.5, sy:0.2, sz:0.45});
-      addFace(g, 0x222222, {ey:0.48, ez:0.42, ex:0.15, s:0.08, white:true, smile:true});
+      const body = part(g,'sphere',0xd99cc8, 0, 0.45, 0, {sx:0.55, sy:0.5, sz:0.5});
+      part(g,'sphere',0xc78bc0, 0, 0.24, 0.06, {sx:0.46, sy:0.16, sz:0.42}); // 底部沉淀色
+      // 垂坠小胳膊
+      part(g,'sphere',0xd99cc8, -0.44, 0.34, 0.12, {sx:0.13, sy:0.2, sz:0.13});
+      part(g,'sphere',0xd99cc8, 0.44, 0.34, 0.12, {sx:0.13, sy:0.2, sz:0.13});
+      addFace(g, 0x222222, {ey:0.5, ez:0.44, ex:0.16, s:0.07, white:true, smile:true, mouthY:0.34});
       g.userData.body = body;
       break;
     }
     case 'diglett': {
       const mound = part(g,'cone',0x9c6b43, 0, 0.28, 0, {sx:0.7, sy:0.45, sz:0.7});
       const head = part(g,'sphere',0xa87a50, 0, 0.55, 0, {sx:0.42, sy:0.42, sz:0.42});
-      part(g,'sphere',0xe88aa0, 0, 0.5, 0.3, {sx:0.16, sy:0.2, sz:0.14});
-      addFace(g, 0x222222, {ey:0.6, ez:0.3, ex:0.1, s:0.06});
+      part(g,'sphere',0xe88aa0, 0, 0.5, 0.38, {sx:0.11, sy:0.09, sz:0.09}); // 圆粉鼻贴在脸面
+      addFace(g, 0x222222, {ey:0.66, ez:0.36, ex:0.12, s:0.055, white:true});
+      part(g,'sphere',0x7a4636, 0, 0.4, 0.36, {sx:0.09, sy:0.06, sz:0.05}); // 张嘴笑
       g.userData.mound = mound; g.userData.head = head;
       break;
     }
     case 'squirtle': {
       const body = part(g,'sphere',0x7ec8e8, 0, 0.42, 0, {sx:0.5, sy:0.5, sz:0.5});
-      part(g,'sphere',0xf2e8c8, 0, 0.4, 0.32, {sx:0.4, sy:0.36, sz:0.14});
-      const shell = part(g,'sphere',0x8a5a2b, 0, 0.5, -0.32, {sx:0.42, sy:0.42, sz:0.3});
-      part(g,'sphere',0xf2e8c8, 0, 0.5, -0.5, {sx:0.32, sy:0.32, sz:0.08});
-      const head = part(g,'sphere',0x7ec8e8, 0, 0.88, 0.16, {sx:0.4, sy:0.4, sz:0.4});
-      addFace(g, 0x222222, {ey:0.95, ez:0.5, ex:0.14, s:0.1, white:true});
+      part(g,'sphere',0xf2e8c8, 0, 0.4, 0.32, {sx:0.38, sy:0.34, sz:0.14}); // 肚皮
+      const shell = part(g,'sphere',0x8a5a2b, 0, 0.5, -0.3, {sx:0.42, sy:0.44, sz:0.32});
+      // 龟壳边圈 + 背甲纹路
+      const rim = part(g,'torus',0xf2e8c8, 0, 0.5, -0.22, {sx:2.0, sy:2.0, sz:2.4});
+      rim.rotation.x = Math.PI/2;
+      part(g,'sphere',0xa87848, -0.12, 0.6, -0.48, {sx:0.09, sy:0.09, sz:0.07});
+      part(g,'sphere',0xa87848, 0.14, 0.54, -0.52, {sx:0.08, sy:0.08, sz:0.07});
+      part(g,'sphere',0xa87848, 0, 0.4, -0.56, {sx:0.09, sy:0.09, sz:0.07});
+      const head = part(g,'sphere',0x7ec8e8, 0, 0.9, 0.16, {sx:0.4, sy:0.4, sz:0.4});
+      part(g,'sphere',0x7ec8e8, 0, 0.84, 0.5, {sx:0.13, sy:0.09, sz:0.1});  // 吻部
+      addFace(g, 0x222222, {ey:0.98, ez:0.5, ex:0.14, s:0.095, white:true, mouthY:0.8, smile:true});
       const tail = part(g,'torus',0x7ec8e8, -0.34, 0.55, -0.3, {sx:1, sy:1, sz:1});
       tail.rotation.y = Math.PI/2;
+      part(g,'sphere',0x7ec8e8, -0.4, 0.42, 0.02, {sx:0.1, sy:0.1, sz:0.12}); // 小手
+      part(g,'sphere',0x7ec8e8, 0.4, 0.42, 0.02, {sx:0.1, sy:0.1, sz:0.12});
       part(g,'cyl',0x7ec8e8, -0.24, 0.12, -0.1, {sx:0.5, sy:0.4, sz:0.5});
       part(g,'cyl',0x7ec8e8, 0.24, 0.12, -0.1, {sx:0.5, sy:0.4, sz:0.5});
       g.userData.tail = tail; g.userData.body = body; g.userData.head = head; g.userData.shell = shell;
@@ -2079,14 +2106,25 @@ function buildPokemon(id){
     case 'scyther': {
       const body = part(g,'sphere',0x58c858, 0, 0.6, 0, {sx:0.4, sy:0.6, sz:0.3});
       const head = part(g,'sphere',0x58c858, 0, 1.12, 0.1, {sx:0.26, sy:0.3, sz:0.26});
-      part(g,'cone',0x58c858, 0, 1.4, 0.14, {sx:0.12, sy:0.3, sz:0.12});
-      addFace(g, 0xffffff, {ey:1.15, ez:0.3, ex:0.1, s:0.09, white:false});
-      const armL = part(g,'box',0xf2e8c8, -0.42, 0.78, 0.1, {sx:0.5, sy:0.1, sz:0.12});
-      const armR = part(g,'box',0xf2e8c8, 0.42, 0.78, 0.1, {sx:0.5, sy:0.1, sz:0.12});
-      armL.position.z = 0.28; armR.position.z = 0.28;
-      armL.userData.blade = true; armR.userData.blade = true;
+      part(g,'cone',0x58c858, 0, 1.42, 0.14, {sx:0.12, sy:0.3, sz:0.12}); // 头冠
+      addFace(g, 0xffffff, {ey:1.16, ez:0.3, ex:0.1, s:0.085, white:true});
+      // 镰刀前臂：基臂 + 子部件刀刃（随挥舞动画一起摆动）
+      const armL = part(g,'box',0xf2e8c8, -0.42, 0.78, 0.28, {sx:0.5, sy:0.1, sz:0.12});
+      const edgeL = part(g,'box',0xd8f0d8, -0.66, 0.78, 0.3, {sx:0.2, sy:0.05, sz:0.08});
+      const tipL = part(g,'box',0xf2e8c8, -0.58, 0.88, 0.3, {sx:0.16, sy:0.08, sz:0.06, rz:0.45});
+      armL.add(edgeL); edgeL.position.set(-0.2, 0, 0.02);
+      armL.add(tipL); tipL.position.set(-0.16, 0.08, 0.02);
+      const armR = part(g,'box',0xf2e8c8, 0.42, 0.78, 0.28, {sx:0.5, sy:0.1, sz:0.12});
+      const edgeR = part(g,'box',0xd8f0d8, 0.66, 0.78, 0.3, {sx:0.2, sy:0.05, sz:0.08});
+      const tipR = part(g,'box',0xf2e8c8, 0.58, 0.88, 0.3, {sx:0.16, sy:0.08, sz:0.06, rz:-0.45});
+      armR.add(edgeR); edgeR.position.set(0.2, 0, 0.02);
+      armR.add(tipR); tipR.position.set(0.16, 0.08, 0.02);
       const wingL = part(g,'box',0xa8e8c8, -0.3, 0.9, -0.2, {sx:0.28, sy:0.16, sz:0.06, transparent:true, opacity:0.7});
+      const veinL = part(g,'box',0x7ac8a0, -0.3, 0.9, -0.19, {sx:0.24, sy:0.02, sz:0.02});
+      wingL.add(veinL); veinL.position.set(0, 0, 0.01);
       const wingR = part(g,'box',0xa8e8c8, 0.3, 0.9, -0.2, {sx:0.28, sy:0.16, sz:0.06, transparent:true, opacity:0.7});
+      const veinR = part(g,'box',0x7ac8a0, 0.3, 0.9, -0.19, {sx:0.24, sy:0.02, sz:0.02});
+      wingR.add(veinR); veinR.position.set(0, 0, 0.01);
       part(g,'cyl',0x58c858, -0.2, 0.2, 0, {sx:0.4, sy:0.4, sz:0.4});
       part(g,'cyl',0x58c858, 0.2, 0.2, 0, {sx:0.4, sy:0.4, sz:0.4});
       g.userData.armL = armL; g.userData.armR = armR;
@@ -2097,23 +2135,34 @@ function buildPokemon(id){
       const body = part(g,'dod',0x9a8a86, 0, 0.55, 0, {sx:0.5, sy:0.5, sz:0.5});
       part(g,'ico',0x8a7a76, -0.3, 0.75, 0, {sx:0.2, sy:0.16, sz:0.2});
       part(g,'ico',0x8a7a76, 0.32, 0.6, -0.1, {sx:0.16, sy:0.14, sz:0.16});
+      part(g,'cyl',0x7a6c68, 0, 0.82, 0, {sx:0.16, sy:0.06, sz:0.16}); // 头顶凹坑
+      addFace(g, 0x333333, {ey:0.6, ez:0.44, ex:0.14, s:0.06, white:true});
+      part(g,'box',0x6a5c58, -0.14, 0.7, 0.42, {sx:0.13, sy:0.028, sz:0.03}); // 眉骨
+      part(g,'box',0x6a5c58, 0.14, 0.7, 0.42, {sx:0.13, sy:0.028, sz:0.03});
+      part(g,'box',0x5a4e4a, 0, 0.47, 0.46, {sx:0.1, sy:0.02, sz:0.02});      // 抿嘴
       const armL = part(g,'sphere',0x9a8a86, -0.55, 0.5, 0.1, {sx:0.24, sy:0.24, sz:0.24});
+      part(g,'sphere',0x8a7a76, -0.6, 0.42, 0.24, {sx:0.07, sy:0.07, sz:0.07}); // 拳峰
       const armR = part(g,'sphere',0x9a8a86, 0.55, 0.5, 0.1, {sx:0.24, sy:0.24, sz:0.24});
-      addFace(g, 0x333333, {ey:0.6, ez:0.4, ex:0.14, s:0.07});
+      part(g,'sphere',0x8a7a76, 0.6, 0.42, 0.24, {sx:0.07, sy:0.07, sz:0.07});
       g.userData.armL = armL; g.userData.armR = armR; g.userData.body = body;
       break;
     }
     case 'bulbasaur': {
       const body = part(g,'sphere',0x5fc8b8, 0, 0.4, 0, {sx:0.5, sy:0.48, sz:0.5});
-      part(g,'sphere',0x4aa8a0, -0.12, 0.4, -0.2, {sx:0.12, sy:0.14, sz:0.1});
-      part(g,'sphere',0x4aa8a0, 0.14, 0.5, -0.1, {sx:0.1, sy:0.12, sz:0.1});
-      const bulb = part(g,'sphere',0x4a9a5a, 0, 0.72, -0.3, {sx:0.3, sy:0.28, sz:0.3});
-      part(g,'cone',0x3f8a4e, -0.12, 0.95, -0.3, {sx:0.12, sy:0.28, sz:0.12});
-      part(g,'cone',0x3f8a4e, 0.1, 0.98, -0.3, {sx:0.1, sy:0.24, sz:0.1});
-      const head = part(g,'sphere',0x5fc8b8, 0, 0.86, 0.12, {sx:0.36, sy:0.36, sz:0.36});
-      part(g,'cone',0x5fc8b8, -0.28, 1.15, 0.1, {sx:0.1, sy:0.2, sz:0.1});
-      part(g,'cone',0x5fc8b8, 0.28, 1.15, 0.1, {sx:0.1, sy:0.2, sz:0.1});
-      addFace(g, 0xd03030, {ey:0.92, ez:0.4, ex:0.13, s:0.08, white:false});
+      // 身上深色斑纹
+      part(g,'sphere',0x3f9a90, -0.2, 0.46, -0.14, {sx:0.12, sy:0.15, sz:0.1});
+      part(g,'sphere',0x3f9a90, 0.18, 0.52, -0.02, {sx:0.1, sy:0.12, sz:0.1});
+      part(g,'sphere',0x3f9a90, 0.02, 0.3, 0.32, {sx:0.1, sy:0.08, sz:0.07});
+      const bulb = part(g,'sphere',0x4a9a5a, 0, 0.74, -0.3, {sx:0.3, sy:0.3, sz:0.3});
+      part(g,'sphere',0x3d8548, 0, 0.6, -0.3, {sx:0.22, sy:0.12, sz:0.22}); // 球茎基部
+      const leaf1 = part(g,'cone',0x3f8a4e, -0.13, 0.98, -0.3, {sx:0.11, sy:0.26, sz:0.11});
+      const leaf2 = part(g,'cone',0x3f8a4e, 0.13, 0.98, -0.3, {sx:0.11, sy:0.26, sz:0.11});
+      const leaf3 = part(g,'cone',0x3f8a4e, 0, 0.9, -0.44, {sx:0.11, sy:0.24, sz:0.11});
+      part(g,'cone',0x3f8a4e, 0, 0.9, -0.16, {sx:0.1, sy:0.22, sz:0.1, rx:0.4}); // 第四片叶
+      const head = part(g,'sphere',0x5fc8b8, 0, 0.86, 0.14, {sx:0.36, sy:0.36, sz:0.36});
+      addEar(g, -0.29, 1.12, 0.14, 0.1, 0.2, 0.1, 0x5fc8b8, 0x3f9a90, 0.3);
+      addEar(g, 0.29, 1.12, 0.14, 0.1, 0.2, 0.1, 0x5fc8b8, 0x3f9a90, -0.3);
+      addFace(g, 0xd03030, {ey:0.92, ez:0.42, ex:0.13, s:0.08, white:true, nose:0x2a5a54, noseY:0.8});
       part(g,'cyl',0x5fc8b8, -0.2, 0.1, 0.05, {sx:0.4, sy:0.3, sz:0.4});
       part(g,'cyl',0x5fc8b8, 0.2, 0.1, 0.05, {sx:0.4, sy:0.3, sz:0.4});
       g.userData.bulb = bulb; g.userData.body = body;
@@ -2121,16 +2170,25 @@ function buildPokemon(id){
     }
     case 'pikachu': {
       const body = part(g,'sphere',0xf8d030, 0, 0.42, 0, {sx:0.46, sy:0.48, sz:0.46});
-      part(g,'box',0xa87828, 0, 0.55, -0.42, {sx:0.3, sy:0.16, sz:0.06});
-      const head = part(g,'sphere',0xf8d030, 0, 0.9, 0.08, {sx:0.4, sy:0.4, sz:0.4});
-      part(g,'cone',0xf8d030, -0.24, 1.28, 0.06, {sx:0.12, sy:0.26, sz:0.12});
-      part(g,'cone',0xf8d030, 0.24, 1.28, 0.06, {sx:0.12, sy:0.26, sz:0.12});
-      part(g,'cone',0x3a2a1a, -0.24, 1.44, 0.06, {sx:0.08, sy:0.12, sz:0.08});
-      part(g,'cone',0x3a2a1a, 0.24, 1.44, 0.06, {sx:0.08, sy:0.12, sz:0.08});
-      addFace(g, 0x222222, {ey:0.95, ez:0.4, ex:0.14, s:0.09, white:true, cheek:0xe05050});
-      const tail = part(g,'box',0xf8d030, -0.4, 0.55, -0.3, {sx:0.4, sy:0.06, sz:0.08, ry:-0.6});
-      part(g,'box',0xf8d030, -0.62, 0.34, -0.3, {sx:0.06, sy:0.4, sz:0.08});
-      part(g,'box',0xa87828, -0.62, 0.16, -0.3, {sx:0.08, sy:0.1, sz:0.09});
+      // 背部两道褐纹
+      part(g,'box',0xa87828, 0, 0.54, -0.4, {sx:0.26, sy:0.05, sz:0.09, rz:0.15});
+      part(g,'box',0xa87828, 0, 0.36, -0.43, {sx:0.3, sy:0.05, sz:0.09, rz:-0.1});
+      const head = part(g,'sphere',0xf8d030, 0, 0.92, 0.08, {sx:0.4, sy:0.4, sz:0.4});
+      addEar(g, -0.26, 1.3, 0.06, 0.13, 0.3, 0.13, 0xf8d030, null, 0.18);
+      addEar(g, 0.26, 1.3, 0.06, 0.13, 0.3, 0.13, 0xf8d030, null, -0.18);
+      part(g,'cone',0x3a2a1a, -0.31, 1.47, 0.06, {sx:0.085, sy:0.14, sz:0.085, rz:0.18}); // 黑耳尖
+      part(g,'cone',0x3a2a1a, 0.31, 1.47, 0.06, {sx:0.085, sy:0.14, sz:0.085, rz:-0.18});
+      addFace(g, 0x222222, {ey:1.0, ez:0.4, ex:0.15, s:0.095, white:true, cheek:0xe05050, nose:0x3a2a1a, noseY:0.9});
+      // 闪电形尾巴：枢纽盒 + 三段折角子部件（随摇尾动画一起摆）
+      const tail = part(g,'box',0xa87828, -0.34, 0.5, -0.26, {sx:0.08, sy:0.16, sz:0.08});
+      const seg1 = part(g,'box',0xf8d030, -0.34, 0.5, -0.26, {sx:0.1, sy:0.06, sz:0.3});
+      tail.add(seg1); seg1.position.set(-0.04, 0.12, 0);
+      const seg2 = part(g,'box',0xf8d030, -0.34, 0.5, -0.26, {sx:0.3, sy:0.06, sz:0.14});
+      tail.add(seg2); seg2.position.set(-0.18, 0.22, 0.02); seg2.rotation.z = 0.55;
+      const seg3 = part(g,'box',0xf8d030, -0.34, 0.5, -0.26, {sx:0.32, sy:0.07, sz:0.2});
+      tail.add(seg3); seg3.position.set(-0.36, 0.4, 0.04); seg3.rotation.z = -0.2;
+      part(g,'sphere',0xf8d030, -0.4, 0.46, 0.12, {sx:0.1, sy:0.1, sz:0.1}); // 小手
+      part(g,'sphere',0xf8d030, 0.4, 0.46, 0.12, {sx:0.1, sy:0.1, sz:0.1});
       part(g,'cyl',0xf8d030, -0.18, 0.1, 0, {sx:0.4, sy:0.3, sz:0.4});
       part(g,'cyl',0xf8d030, 0.18, 0.1, 0, {sx:0.4, sy:0.3, sz:0.4});
       g.userData.tail = tail; g.userData.body = body; g.userData.head = head;
@@ -2138,55 +2196,88 @@ function buildPokemon(id){
     }
     case 'eevee': {
       const body = part(g,'sphere',0xc89a68, 0, 0.42, 0, {sx:0.46, sy:0.48, sz:0.46});
-      part(g,'sphere',0xf2e0c0, 0, 0.55, 0.28, {sx:0.34, sy:0.28, sz:0.14});
+      part(g,'sphere',0xf2e0c0, 0, 0.55, 0.28, {sx:0.36, sy:0.32, sz:0.15}); // 胸前绒毛
+      // 颈部毛领（一圈奶白球）
+      for (let k=0;k<6;k++){
+        const a = k/6*Math.PI*2;
+        part(g,'sphere',0xf2e0c0, Math.cos(a)*0.27, 0.62, Math.sin(a)*0.2+0.08, {sx:0.1, sy:0.09, sz:0.1});
+      }
       const head = part(g,'sphere',0xc89a68, 0, 0.9, 0.08, {sx:0.38, sy:0.38, sz:0.38});
-      part(g,'cone',0xc89a68, -0.24, 1.3, 0.06, {sx:0.14, sy:0.28, sz:0.14});
-      part(g,'cone',0xc89a68, 0.24, 1.3, 0.06, {sx:0.14, sy:0.28, sz:0.14});
-      part(g,'cone',0x8a5a30, -0.24, 1.46, 0.06, {sx:0.09, sy:0.12, sz:0.09});
-      part(g,'cone',0x8a5a30, 0.24, 1.46, 0.06, {sx:0.09, sy:0.12, sz:0.09});
-      addFace(g, 0x222222, {ey:0.95, ez:0.4, ex:0.13, s:0.09, white:true});
-      const tail = part(g,'cone',0xc89a68, -0.3, 0.7, -0.42, {sx:0.2, sy:0.4, sz:0.2, rx:-0.5});
-      part(g,'sphere',0xf2e0c0, -0.32, 0.45, -0.55, {sx:0.14, sy:0.14, sz:0.14});
+      addEar(g, -0.26, 1.3, 0.06, 0.15, 0.3, 0.13, 0xc89a68, 0x6a4020, 0.12);
+      addEar(g, 0.26, 1.3, 0.06, 0.15, 0.3, 0.13, 0xc89a68, 0x6a4020, -0.12);
+      part(g,'sphere',0xf2e0c0, 0, 0.82, 0.36, {sx:0.15, sy:0.11, sz:0.13}); // 吻部绒毛
+      addFace(g, 0x222222, {ey:0.96, ez:0.4, ex:0.13, s:0.09, white:true, nose:0x5a3a28, noseY:0.86});
+      part(g,'box',0x8a5a30, 0, 0.5, -0.38, {sx:0.22, sy:0.05, sz:0.12}); // 背部深纹
+      const tail = part(g,'cone',0xc89a68, -0.3, 0.68, -0.42, {sx:0.22, sy:0.42, sz:0.22, rx:-0.5});
+      part(g,'sphere',0xf2e0c0, -0.32, 0.47, -0.56, {sx:0.15, sy:0.15, sz:0.15}); // 蓬尾尖
+      part(g,'cyl',0xc89a68, -0.16, 0.1, 0, {sx:0.36, sy:0.3, sz:0.36});
+      part(g,'cyl',0xc89a68, 0.16, 0.1, 0, {sx:0.36, sy:0.3, sz:0.36});
       g.userData.tail = tail; g.userData.body = body; g.userData.head = head;
       break;
     }
     case 'charmander': {
       const body = part(g,'sphere',0xe89040, 0, 0.42, 0, {sx:0.46, sy:0.5, sz:0.46});
-      part(g,'sphere',0xf8e0b0, 0, 0.4, 0.3, {sx:0.34, sy:0.32, sz:0.12});
+      part(g,'sphere',0xf8e0b0, 0, 0.38, 0.3, {sx:0.34, sy:0.32, sz:0.12}); // 肚皮
       const head = part(g,'sphere',0xe89040, 0, 0.9, 0.1, {sx:0.38, sy:0.38, sz:0.38});
-      part(g,'cone',0xe89040, -0.2, 1.25, 0.08, {sx:0.1, sy:0.2, sz:0.1});
-      part(g,'cone',0xe89040, 0.2, 1.25, 0.08, {sx:0.1, sy:0.2, sz:0.1});
-      addFace(g, 0x222222, {ey:0.95, ez:0.42, ex:0.13, s:0.09, white:true});
-      const flame = part(g,'cone',0xf05030, 0, 0.72, -0.4, {sx:0.12, sy:0.34, sz:0.12});
-      part(g,'cone',0xffd75e, 0, 0.82, -0.4, {sx:0.07, sy:0.22, sz:0.07});
+      part(g,'sphere',0xe89040, 0, 0.82, 0.42, {sx:0.13, sy:0.1, sz:0.11}); // 吻部
+      addEar(g, -0.2, 1.24, 0.08, 0.1, 0.2, 0.1, 0xe89040, null, 0.15);
+      addEar(g, 0.2, 1.24, 0.08, 0.1, 0.2, 0.1, 0xe89040, null, -0.15);
+      addFace(g, 0x222222, {ey:0.96, ez:0.42, ex:0.13, s:0.09, white:true, smile:true, mouthY:0.8});
+      const flame = part(g,'cone',0xf05030, 0, 0.72, -0.42, {sx:0.13, sy:0.36, sz:0.13});
+      const flameIn = part(g,'cone',0xffd75e, 0, 0.8, -0.42, {sx:0.08, sy:0.24, sz:0.08});
+      flame.add(flameIn); flameIn.position.set(0, 0.05, 0); // 内焰随外焰一起摇曳
+      const flameCore = part(g,'sphere',0xfff2c8, 0, 0.56, -0.42, {sx:0.09, sy:0.09, sz:0.09}); // 尾端火种
+      part(g,'sphere',0xe89040, 0, 0.5, -0.36, {sx:0.11, sy:0.11, sz:0.11});
+      part(g,'cyl',0xe89040, -0.18, 0.1, 0, {sx:0.4, sy:0.3, sz:0.4});
+      part(g,'cyl',0xe89040, 0.18, 0.1, 0, {sx:0.4, sy:0.3, sz:0.4});
       g.userData.flame = flame; g.userData.body = body; g.userData.head = head;
       break;
     }
     case 'snorlax': {
       const body = part(g,'sphere',0x4a7a6a, 0, 0.8, 0, {sx:0.72, sy:0.72, sz:0.72});
-      part(g,'sphere',0xf2e0c0, 0, 0.78, 0.4, {sx:0.5, sy:0.5, sz:0.3});
-      part(g,'sphere',0x4a7a6a, -0.5, 1.2, 0, {sx:0.18, sy:0.18, sz:0.18});
-      part(g,'sphere',0x4a7a6a, 0.5, 1.2, 0, {sx:0.18, sy:0.18, sz:0.18});
-      part(g,'sphere',0x4a7a6a, -0.5, 1.42, 0, {sx:0.1, sy:0.12, sz:0.1});
-      part(g,'sphere',0x4a7a6a, 0.5, 1.42, 0, {sx:0.1, sy:0.12, sz:0.1});
-      part(g,'box',0x3a5a4a, -0.16, 1.02, 0.6, {sx:0.07, sy:0.03, sz:0.02});
-      part(g,'box',0x3a5a4a, 0.16, 1.02, 0.6, {sx:0.07, sy:0.03, sz:0.02});
-      part(g,'box',0x3a5a4a, 0, 0.85, 0.65, {sx:0.1, sy:0.03, sz:0.02});
-      part(g,'cyl',0x4a7a6a, -0.3, 0.1, 0.1, {sx:0.5, sy:0.3, sz:0.5});
-      part(g,'cyl',0x4a7a6a, 0.3, 0.1, 0.1, {sx:0.5, sy:0.3, sz:0.5});
+      part(g,'sphere',0xf2e0c0, 0, 0.72, 0.44, {sx:0.5, sy:0.5, sz:0.3});   // 大肚皮
+      part(g,'sphere',0xf2e0c0, 0, 1.06, 0.52, {sx:0.36, sy:0.28, sz:0.18}); // 米色脸面
+      part(g,'sphere',0x4a7a6a, -0.5, 1.24, 0, {sx:0.18, sy:0.18, sz:0.18}); // 耳朵
+      part(g,'sphere',0x4a7a6a, 0.5, 1.24, 0, {sx:0.18, sy:0.18, sz:0.18});
+      part(g,'cone',0x3a5a4a, -0.5, 1.38, 0, {sx:0.09, sy:0.12, sz:0.09});   // 耳内
+      part(g,'cone',0x3a5a4a, 0.5, 1.38, 0, {sx:0.09, sy:0.12, sz:0.09});
+      // 睡颜：眯眼 + 嘴缝 + 两颗小獠牙
+      part(g,'box',0x3a5a4a, -0.15, 1.1, 0.62, {sx:0.1, sy:0.024, sz:0.02, rz:0.28});
+      part(g,'box',0x3a5a4a, 0.15, 1.1, 0.62, {sx:0.1, sy:0.024, sz:0.02, rz:-0.28});
+      part(g,'box',0x3a5a4a, 0, 0.92, 0.66, {sx:0.15, sy:0.026, sz:0.02});
+      part(g,'box',0xffffff, -0.08, 0.89, 0.66, {sx:0.03, sy:0.05, sz:0.02});
+      part(g,'box',0xffffff, 0.08, 0.89, 0.66, {sx:0.03, sy:0.05, sz:0.02});
+      part(g,'sphere',0x4a7a6a, -0.66, 0.62, 0.18, {sx:0.2, sy:0.26, sz:0.22}); // 垂臂
+      part(g,'sphere',0x4a7a6a, 0.66, 0.62, 0.18, {sx:0.2, sy:0.26, sz:0.22});
+      part(g,'sphere',0xf2e0c0, -0.68, 0.5, 0.3, {sx:0.12, sy:0.1, sz:0.12});   // 手掌
+      part(g,'sphere',0xf2e0c0, 0.68, 0.5, 0.3, {sx:0.12, sy:0.1, sz:0.12});
+      part(g,'cyl',0xf2e0c0, -0.34, 0.12, 0.42, {sx:0.28, sy:0.18, sz:0.3});    // 米色脚底
+      part(g,'cyl',0xf2e0c0, 0.34, 0.12, 0.42, {sx:0.28, sy:0.18, sz:0.3});
       g.userData.body = body;
       break;
     }
     case 'pidgey': {
       const body = part(g,'sphere',0xc8a068, 0, 0.42, 0, {sx:0.44, sy:0.42, sz:0.46});
-      part(g,'sphere',0xf2e4c8, 0, 0.38, 0.26, {sx:0.3, sy:0.26, sz:0.18}); // 奶油色胸腹
-      const head = part(g,'sphere',0xc8a068, 0, 0.85, 0.1, {sx:0.36, sy:0.34, sz:0.36});
+      part(g,'sphere',0xf2e4c8, 0, 0.38, 0.26, {sx:0.3, sy:0.26, sz:0.18}); // 奶油胸腹
+      const head = part(g,'sphere',0xc8a068, 0, 0.86, 0.1, {sx:0.36, sy:0.34, sz:0.36});
       part(g,'cone',0xb08a50, -0.1, 1.12, 0.12, {sx:0.16, sy:0.18, sz:0.1, rz:0.4}); // 冠羽
-      part(g,'cone',0x38302a, 0, 0.85, 0.38, {sx:0.09, sy:0.12, sz:0.09, rx:Math.PI/2}); // 喙
-      addFace(g, 0x222222, {ey:0.9, ez:0.34, ex:0.13, s:0.08, white:true});
+      part(g,'cone',0xf2e4c8, 0.06, 1.1, 0.08, {sx:0.1, sy:0.14, sz:0.08, rz:-0.35});
+      part(g,'cone',0x38302a, 0, 0.84, 0.42, {sx:0.08, sy:0.13, sz:0.08, rx:Math.PI/2}); // 上喙
+      part(g,'cone',0x584840, 0, 0.8, 0.38, {sx:0.06, sy:0.08, sz:0.06, rx:Math.PI/2});  // 下喙
+      addFace(g, 0x222222, {ey:0.92, ez:0.34, ex:0.13, s:0.075, white:true});
       const wingL = part(g,'sphere',0xb08a50, -0.38, 0.48, 0, {sx:0.16, sy:0.22, sz:0.3});
+      const fL1 = part(g,'box',0xa87c44, -0.38, 0.48, 0, {sx:0.12, sy:0.14, sz:0.24});
+      wingL.add(fL1); fL1.position.set(0, -0.08, -0.08); fL1.rotation.x = -0.3;
+      const fL2 = part(g,'box',0x98703a, -0.38, 0.48, 0, {sx:0.09, sy:0.1, sz:0.18});
+      wingL.add(fL2); fL2.position.set(0, -0.14, -0.02); fL2.rotation.x = -0.5;
       const wingR = part(g,'sphere',0xb08a50, 0.38, 0.48, 0, {sx:0.16, sy:0.22, sz:0.3});
+      const fR1 = part(g,'box',0xa87c44, 0.38, 0.48, 0, {sx:0.12, sy:0.14, sz:0.24});
+      wingR.add(fR1); fR1.position.set(0, -0.08, -0.08); fR1.rotation.x = -0.3;
+      const fR2 = part(g,'box',0x98703a, 0.38, 0.48, 0, {sx:0.09, sy:0.1, sz:0.18});
+      wingR.add(fR2); fR2.position.set(0, -0.14, -0.02); fR2.rotation.x = -0.5;
       const tail = part(g,'cone',0xb08a50, 0, 0.45, -0.4, {sx:0.16, sy:0.26, sz:0.08, rx:-1.9});
+      part(g,'box',0xa87c44, -0.07, 0.42, -0.44, {sx:0.06, sy:0.02, sz:0.2, rx:-0.35});
+      part(g,'box',0xa87c44, 0.07, 0.42, -0.44, {sx:0.06, sy:0.02, sz:0.2, rx:-0.35});
       part(g,'cyl',0xe8a030, -0.14, 0.08, 0.04, {sx:0.24, sy:0.16, sz:0.24});
       part(g,'cyl',0xe8a030, 0.14, 0.08, 0.04, {sx:0.24, sy:0.16, sz:0.24});
       g.userData.wingL = wingL; g.userData.wingR = wingR; g.userData.tail = tail; g.userData.body = body; g.userData.head = head;
@@ -2194,23 +2285,36 @@ function buildPokemon(id){
     }
     case 'magnemite': {
       const body = part(g,'sphere',0xb8bec8, 0, 0.62, 0, {sx:0.42, sy:0.42, sz:0.42});
-      part(g,'sphere',0xffffff, 0, 0.64, 0.36, {sx:0.16, sy:0.16, sz:0.1});  // 大眼睛
-      part(g,'sphere',0x222222, 0, 0.64, 0.42, {sx:0.09, sy:0.09, sz:0.05});
-      const screwT = part(g,'cyl',0x8a9098, 0, 0.98, 0, {sx:0.3, sy:0.24, sz:0.3});   // 顶部螺丝
-      const screwL = part(g,'cyl',0x8a9098, -0.46, 0.66, 0, {sx:0.26, sy:0.18, sz:0.26, rz:Math.PI/2}); // 侧螺丝
-      const magL = part(g,'box',0xd84a3a, -0.58, 0.5, 0, {sx:0.12, sy:0.2, sz:0.14});  // 磁极
+      // 独眼：眼白 + 蓝虹膜 + 黑瞳
+      part(g,'sphere',0xffffff, 0, 0.64, 0.36, {sx:0.17, sy:0.17, sz:0.12});
+      part(g,'sphere',0x3a5ac8, 0, 0.64, 0.43, {sx:0.09, sy:0.09, sz:0.05});
+      part(g,'sphere',0x1a1a1a, 0, 0.64, 0.46, {sx:0.045, sy:0.045, sz:0.03});
+      part(g,'sphere',0xffffff, -0.03, 0.68, 0.47, {sx:0.02, sy:0.02, sz:0.015}); // 高光
+      const screwT = part(g,'cyl',0x8a9098, 0, 0.98, 0, {sx:0.3, sy:0.24, sz:0.3});
+      const ph1 = part(g,'box',0x6a7078, 0, 0.98, 0, {sx:0.02, sy:0.02, sz:0.2}); // 顶螺丝十字槽（随旋转）
+      screwT.add(ph1); ph1.position.set(0, 0.13, 0);
+      const ph2 = part(g,'box',0x6a7078, 0, 0.98, 0, {sx:0.2, sy:0.02, sz:0.02});
+      screwT.add(ph2); ph2.position.set(0, 0.13, 0);
+      const screwL = part(g,'cyl',0x8a9098, -0.46, 0.66, 0, {sx:0.26, sy:0.18, sz:0.26, rz:Math.PI/2});
+      const screwR = part(g,'cyl',0x8a9098, 0.46, 0.66, 0, {sx:0.26, sy:0.18, sz:0.26, rz:Math.PI/2});
+      const magL = part(g,'box',0xd84a3a, -0.58, 0.5, 0, {sx:0.12, sy:0.2, sz:0.14});
+      part(g,'sphere',0xf0f0f0, -0.58, 0.4, 0, {sx:0.06, sy:0.05, sz:0.09}); // 磁极白端
       const magR = part(g,'box',0x4a6ad8, 0.58, 0.5, 0, {sx:0.12, sy:0.2, sz:0.14});
+      part(g,'sphere',0xf0f0f0, 0.58, 0.4, 0, {sx:0.06, sy:0.05, sz:0.09});
+      part(g,'ico',0x9aa0a8, 0.3, 0.5, 0.3, {sx:0.05, sy:0.05, sz:0.05}); // 侧身螺栓
+      part(g,'ico',0x9aa0a8, -0.3, 0.5, 0.3, {sx:0.05, sy:0.05, sz:0.05});
       g.userData.body = body; g.userData.screwT = screwT; g.userData.screwL = screwL; g.userData.magL = magL; g.userData.magR = magR;
       break;
     }
     case 'oddish': {
       const body = part(g,'sphere',0x5878d8, 0, 0.4, 0, {sx:0.44, sy:0.42, sz:0.44});
-      addFace(g, 0xd03030, {ey:0.46, ez:0.36, ex:0.14, s:0.085, white:false}); // 红眼睛
-      part(g,'sphere',0xd8b8e8, -0.18, 0.3, 0.32, {sx:0.07, sy:0.05, sz:0.04}); // 小嘴
-      const leafC = part(g,'sphere',0x3f8a4e, 0, 0.68, -0.05, {sx:0.16, sy:0.14, sz:0.16});
-      const leaf1 = part(g,'cone',0x4aa85c, -0.22, 0.82, -0.05, {sx:0.14, sy:0.3, sz:0.06, rz:0.9});
-      const leaf2 = part(g,'cone',0x4aa85c, 0.22, 0.82, -0.05, {sx:0.14, sy:0.3, sz:0.06, rz:-0.9});
-      const leaf3 = part(g,'cone',0x4aa85c, 0, 0.9, -0.2, {sx:0.14, sy:0.28, sz:0.06, rx:-0.5});
+      addFace(g, 0xd03030, {ey:0.46, ez:0.4, ex:0.14, s:0.085, white:true}); // 红眼睛
+      part(g,'sphere',0x3a2a5a, 0, 0.34, 0.41, {sx:0.07, sy:0.045, sz:0.04}); // 小嘴
+      part(g,'sphere',0x3f8a4e, 0, 0.68, -0.05, {sx:0.16, sy:0.14, sz:0.16});
+      const leaf1 = part(g,'cone',0x4aa85c, -0.16, 0.84, -0.02, {sx:0.14, sy:0.3, sz:0.06, rz:0.9});
+      const leaf2 = part(g,'cone',0x4aa85c, 0.16, 0.84, -0.02, {sx:0.14, sy:0.3, sz:0.06, rz:-0.9});
+      const leaf3 = part(g,'cone',0x4aa85c, 0, 0.92, -0.18, {sx:0.14, sy:0.28, sz:0.06, rx:-0.5});
+      part(g,'cone',0x4aa85c, 0, 0.9, 0.12, {sx:0.12, sy:0.24, sz:0.06, rx:0.45}); // 前侧第四叶
       part(g,'cyl',0x3a68c8, -0.15, 0.06, 0.04, {sx:0.3, sy:0.12, sz:0.3});
       part(g,'cyl',0x3a68c8, 0.15, 0.06, 0.04, {sx:0.3, sy:0.12, sz:0.3});
       g.userData.leaf1 = leaf1; g.userData.leaf2 = leaf2; g.userData.leaf3 = leaf3; g.userData.body = body;
@@ -2219,31 +2323,40 @@ function buildPokemon(id){
     case 'psyduck': {
       const body = part(g,'sphere',0xf2e0b0, 0, 0.42, 0, {sx:0.44, sy:0.5, sz:0.44});
       const head = part(g,'sphere',0xf2e0b0, 0, 0.92, 0.06, {sx:0.4, sy:0.38, sz:0.38});
-      const bill = part(g,'sphere',0xe89838, 0, 0.86, 0.38, {sx:0.26, sy:0.16, sz:0.18});
-      part(g,'sphere',0xd07828, 0, 0.93, 0.47, {sx:0.13, sy:0.08, sz:0.06});
-      addFace(g, 0x222222, {ey:1.0, ez:0.36, ex:0.15, s:0.075, white:true});
+      const bill = part(g,'sphere',0xe89838, 0, 0.88, 0.4, {sx:0.3, sy:0.16, sz:0.2}); // 宽扁嘴
+      part(g,'sphere',0xd07828, -0.08, 0.94, 0.5, {sx:0.03, sy:0.03, sz:0.03}); // 鼻孔
+      part(g,'sphere',0xd07828, 0.08, 0.94, 0.5, {sx:0.03, sy:0.03, sz:0.03});
+      // 三根呆毛
+      part(g,'cyl',0xd8b86a, -0.07, 1.36, 0.02, {sx:0.018, sy:0.18, sz:0.018, rx:-0.25, rz:0.15});
+      part(g,'cyl',0xd8b86a, 0, 1.38, 0.02, {sx:0.018, sy:0.2, sz:0.018, rx:-0.2});
+      part(g,'cyl',0xd8b86a, 0.07, 1.36, 0.02, {sx:0.018, sy:0.18, sz:0.018, rx:-0.25, rz:-0.15});
+      addFace(g, 0x222222, {ey:1.0, ez:0.34, ex:0.15, s:0.07, white:true});
       // 扶着脑袋的双手（可达鸭的招牌姿势）
-      part(g,'sphere',0xf2e0b0, -0.34, 0.95, 0.18, {sx:0.13, sy:0.18, sz:0.13});
-      part(g,'sphere',0xf2e0b0, 0.34, 0.95, 0.18, {sx:0.13, sy:0.18, sz:0.13});
+      part(g,'sphere',0xf2e0b0, -0.34, 0.98, 0.16, {sx:0.14, sy:0.2, sz:0.14});
+      part(g,'sphere',0xf2e0b0, 0.34, 0.98, 0.16, {sx:0.14, sy:0.2, sz:0.14});
       part(g,'cyl',0xe8b060, -0.16, 0.1, 0.02, {sx:0.4, sy:0.3, sz:0.4});
       part(g,'cyl',0xe8b060, 0.16, 0.1, 0.02, {sx:0.4, sy:0.3, sz:0.4});
-      part(g,'box',0xe8b060, -0.2, 0.5, -0.3, {sx:0.16, sy:0.06, sz:0.16});
-      part(g,'box',0xe8b060, 0.2, 0.5, -0.3, {sx:0.16, sy:0.06, sz:0.16});
+      part(g,'sphere',0xf2e0b0, 0, 0.38, -0.42, {sx:0.09, sy:0.12, sz:0.09}); // 尾部小绒球
       g.userData.bill = bill; g.userData.body = body; g.userData.head = head;
       break;
     }
     case 'meowth': {
       const body = part(g,'sphere',0xf2e0c0, 0, 0.42, 0, {sx:0.44, sy:0.5, sz:0.44});
       const head = part(g,'sphere',0xf2e0c0, 0, 0.9, 0.08, {sx:0.38, sy:0.38, sz:0.38});
-      part(g,'cone',0xf2e0c0, -0.22, 1.28, 0.06, {sx:0.14, sy:0.24, sz:0.14});
-      part(g,'cone',0xf2e0c0, 0.22, 1.28, 0.06, {sx:0.14, sy:0.24, sz:0.14});
-      part(g,'cone',0x8a5a30, -0.22, 1.44, 0.06, {sx:0.09, sy:0.1, sz:0.09});
-      part(g,'cone',0x8a5a30, 0.22, 1.44, 0.06, {sx:0.09, sy:0.1, sz:0.09});
-      const coin = part(g,'disc',0xe8c020, 0, 1.08, 0.4, {});
+      addEar(g, -0.22, 1.26, 0.06, 0.14, 0.24, 0.14, 0xf2e0c0, 0xe8a8a0, 0.15);
+      addEar(g, 0.22, 1.26, 0.06, 0.14, 0.24, 0.14, 0xf2e0c0, 0xe8a8a0, -0.15);
+      part(g,'cone',0x8a5a30, -0.22, 1.42, 0.06, {sx:0.09, sy:0.1, sz:0.09, rz:0.15}); // 耳尖
+      part(g,'cone',0x8a5a30, 0.22, 1.42, 0.06, {sx:0.09, sy:0.1, sz:0.09, rz:-0.15});
+      const coin = part(g,'disc',0xe8c020, 0, 1.08, 0.4, {sx:1.1, sy:1.1, sz:1});
       coin.rotation.x = Math.PI/2;
-      addFace(g, 0x222222, {ey:0.95, ez:0.42, ex:0.14, s:0.08, smile:true});
-      part(g,'box',0xc8b088, -0.34, 0.88, 0.4, {sx:0.18, sy:0.02, sz:0.02});
-      part(g,'box',0xc8b088, 0.34, 0.88, 0.4, {sx:0.18, sy:0.02, sz:0.02});
+      const coinIn = part(g,'disc',0xc89818, 0, 1.08, 0.41, {sx:0.7, sy:0.7, sz:1});
+      coinIn.rotation.x = Math.PI/2;
+      addFace(g, 0x222222, {ey:0.96, ez:0.4, ex:0.14, s:0.085, white:true, smile:true, mouthY:0.82, nose:0xc89078, noseY:0.9});
+      // 胡须（两侧各两根）
+      part(g,'box',0xd8c8a8, -0.37, 0.94, 0.34, {sx:0.17, sy:0.014, sz:0.014, rz:0.1});
+      part(g,'box',0xd8c8a8, -0.37, 0.88, 0.34, {sx:0.17, sy:0.014, sz:0.014, rz:-0.1});
+      part(g,'box',0xd8c8a8, 0.37, 0.94, 0.34, {sx:0.17, sy:0.014, sz:0.014, rz:-0.1});
+      part(g,'box',0xd8c8a8, 0.37, 0.88, 0.34, {sx:0.17, sy:0.014, sz:0.014, rz:0.1});
       const tail = part(g,'torus',0xf2e0c0, -0.4, 0.6, -0.3, {sx:0.8, sy:0.8, sz:0.8});
       part(g,'sphere',0x8a5a30, -0.52, 0.6, -0.42, {sx:0.1, sy:0.1, sz:0.1});
       part(g,'cyl',0x8a5a30, -0.2, 0.12, 0, {sx:0.4, sy:0.3, sz:0.4});
@@ -2605,8 +2718,8 @@ function applyCamera(){
 }
 function snapCamera(){
   if (!camera) return;
-  if (inHouse){ camTarget.x = 0; camTarget.z = 0; setZoom(0.55); }
-  else { camTarget.x = clamp(playerWorld().x, -CLAMP_X, CLAMP_X); camTarget.z = clamp(playerWorld().z, -CLAMP_Z, CLAMP_Z); setZoom(1); }
+  if (inHouse){ camTarget.x = 0; camTarget.z = 0; setZoom(URL_ZOOM || 0.55); }
+  else { camTarget.x = clamp(playerWorld().x, -CLAMP_X, CLAMP_X); camTarget.z = clamp(playerWorld().z, -CLAMP_Z, CLAMP_Z); setZoom(URL_ZOOM || 1); }
   applyCamera();
 }
 function updateCamera(dt){
