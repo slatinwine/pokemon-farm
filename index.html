@@ -2398,14 +2398,15 @@ function initRender2D(){
 }
 function camLeftX(){ return inHouse ? (INT_W-VIEW_TW)/2 : camTarget.x + MAP_W/2 - VIEW_TW/2; }
 function camTopY(){ return inHouse ? (INT_H-VIEW_TH)/2 : camTarget.z + MAP_H/2 - VIEW_TH/2; }
-/* 2D 相机跟随：死区 + 边界夹取（与 3D 版同参数） */
+/* 2D 相机跟随：死区 + 边界夹取（坐标与 3D 版一致，用 playerWorld 世界坐标） */
 function updateCamera2D(dt){
   if (!game) return;
   if (inHouse){ camTarget.x = 0; camTarget.z = 0; return; }
-  const dx = player.x - camTarget.x, dz = player.y - camTarget.z;
+  const pw = playerWorld();
+  const dx = pw.x - camTarget.x, dz = pw.z - camTarget.z;
   let tx = camTarget.x, tz = camTarget.z;
-  if (Math.abs(dx) > DEAD_X) tx = player.x - Math.sign(dx)*DEAD_X;
-  if (Math.abs(dz) > DEAD_Z) tz = player.y - Math.sign(dz)*DEAD_Z;
+  if (Math.abs(dx) > DEAD_X) tx = pw.x - Math.sign(dx)*DEAD_X;
+  if (Math.abs(dz) > DEAD_Z) tz = pw.z - Math.sign(dz)*DEAD_Z;
   const k = Math.min(1, dt*8);
   camTarget.x += (tx - camTarget.x)*k;
   camTarget.z += (tz - camTarget.z)*k;
@@ -2978,9 +2979,14 @@ function applyCamera(){
   camera.lookAt(camTarget.x, 0, camTarget.z);
 }
 function snapCamera(){
-  if (!camera) return;
-  if (inHouse){ camTarget.x = 0; camTarget.z = 0; setZoom(0.55); }
-  else { camTarget.x = clamp(playerWorld().x, -CLAMP_X, CLAMP_X); camTarget.z = clamp(playerWorld().z, -CLAMP_Z, CLAMP_Z); setZoom(1); }
+  // camTarget 对位对 2D/3D 都生效；setZoom/applyCamera 仅 3D 模式需要
+  if (inHouse){ camTarget.x = 0; camTarget.z = 0; }
+  else {
+    camTarget.x = clamp(playerWorld().x, -CLAMP_X, CLAMP_X);
+    camTarget.z = clamp(playerWorld().z, -CLAMP_Z, CLAMP_Z);
+  }
+  if (!camera) return; // 2D 像素模式：无 3D 相机可驱动
+  setZoom(inHouse ? 0.55 : 1);
   applyCamera();
 }
 function updateCamera(dt){
@@ -3224,6 +3230,7 @@ function bootSim(){
   updateFx();
   initTouch();
   startAmbientAudio();
+  snapCamera(); // 开局镜头对准玩家（读档/新档出生点）
   requestAnimationFrame(t => { lastFrame = t; requestAnimationFrame(frame); });
   setInterval(()=>{ if (game && !inHouse) saveGame(); }, 30000);
 }
