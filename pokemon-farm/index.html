@@ -261,6 +261,7 @@ const FORM_NAMES = {
   ditto:'百变怪', diglett:'地鼠', squirtle:'车厘龟', scyther:'飞天螳螂',
   geodude:'小拳石', bulbasaur:'妙蛙种子', psyduck:'可达鸭',
   pidgey:'波波', magnemite:'小磁怪', oddish:'走路草',
+  pikachu:'皮卡丘', eevee:'伊布', charmander:'小火龙', snorlax:'卡比兽', meowth:'喵喵',
 };
 
 /* ---------------- 技能（商店研习，随成长解锁） ----------------
@@ -676,22 +677,19 @@ $('wrap').addEventListener('wheel', e=>{
 }, {passive:false});
 
 function pickTile(e){
-  if (!renderer || !camera) return null;
+  if (!px2) return null;
   const rect = canvas.getBoundingClientRect();
-  const ndc = { x: ((e.clientX-rect.left)/rect.width)*2-1, y: -((e.clientY-rect.top)/rect.height)*2+1 };
-  raycaster.setFromCamera(ndc, camera);
+  const mx = ((e.clientX-rect.left)/rect.width)*VIEW_W;
+  const my = ((e.clientY-rect.top)/rect.height)*VIEW_H;
+  const wx = mx/S + camLeftX(), wy = my/S + camTopY();
   if (inHouse){
-    if (!interiorGround) return null;
-    const hit = raycaster.intersectObject(interiorGround, false)[0];
-    if (!hit) return null;
-    return [Math.floor(hit.point.x + INT_W/2), Math.floor(hit.point.z + INT_H/2)];
+    const tx = Math.floor(wx), ty = Math.floor(wy);
+    if (tx<0||ty<0||tx>=INT_W||ty>=INT_H) return null;
+    return [tx, ty];
   }
-  if (!groundMesh) return null;
-  const hit = raycaster.intersectObject(groundMesh, false)[0];
-  if (!hit) return null;
-  if (hit.instanceId != null) return [hit.instanceId % MAP_W, Math.floor(hit.instanceId / MAP_W)];
-  const u = hit.object.userData;
-  return u ? [u.tx, u.ty] : null;
+  const tx = Math.floor(wx), ty = Math.floor(wy);
+  if (tx<0||ty<0||tx>=MAP_W||ty>=MAP_H) return null;
+  return [tx, ty];
 }
 
 /* ---------------- 悬停提示 ---------------- */
@@ -1379,14 +1377,12 @@ function useSunlight(){
   updateHud();
 }
 function spawnSunParticles(){
-  if (!GEO || !scene) return;
+  if (!px2) return;
   const src = playerWorld();
   for (let i=0;i<14;i++){
-    const m = new THREE.Mesh(GEO.sphere, mat(0xa8e858, {transparent:true, opacity:0.9, dynamic:true}));
-    m.scale.setScalar(0.06+Math.random()*0.05);
-    m.position.set(src.x+(Math.random()-0.5)*2.6, 0.3, src.z+(Math.random()-0.5)*2.6);
-    scene.add(m);
-    particles.push({mesh:m, vx:(Math.random()-0.5)*1.2, vy:2.5+Math.random()*2, vz:(Math.random()-0.5)*1.2, ttl:0.7, age:0});
+    particles.push({
+      x:(src.x+MAP_W/2+(Math.random()-0.5)*2.6)*16, y:(src.z+MAP_H/2+(Math.random()-0.5)*2.6)*16,
+      vx:(Math.random()-0.5)*20, vy:-50-Math.random()*30, vz:0, ttl:0.7, age:0, color:'#a8e858'});
   }
 }
 
@@ -1716,11 +1712,6 @@ const CAM_OFF = {y:26, z:20};   // 相机相对注视点的偏移（决定俯视
 const DEAD_X = 8, DEAD_Z = 6;   // 跟随死区（玩家可偏离中心的格数）
 const CLAMP_X = 8, CLAMP_Z = 5; // 相机中心夹取范围（保证视野不出农场）
 let camTarget = {x:0, z:0};
-// 可选 URL 参数 ?zoom=0.3：固定镜头缩放（建模拟点检查/截图用）
-const URL_ZOOM = (()=>{ try{
-  const m = (typeof location!=='undefined'?location.search:'').match(/[?&]zoom=([\d.]+)/);
-  return m ? Math.min(1.5, Math.max(0.15, +m[1])) : null;
-}catch(e){ return null; } })();
 
 const matCache = new Map();
 function mat(color, o){
@@ -2016,35 +2007,313 @@ function rebuildWilds3D(){
 /* =====================================================================
    宝可梦低多边形建模（形神兼具：剪影 + 配色 + 表情 + 待机动画）
    ===================================================================== */
-function addFace(g, eyeColor, opts){
-  opts = opts||{};
-  const ey = opts.ey!=null?opts.ey:0.3, ez = opts.ez!=null?opts.ez:0.3, ex = opts.ex!=null?opts.ex:0.16;
-  const s = opts.s||0.09;
-  if (opts.white){ // 眼白在瞳孔后一圈，圆润卡通眼
-    part(g,'sphere',0xffffff, -ex, ey, ez-s*0.3, {sx:s*1.2, sy:s*1.2, sz:s*0.6});
-    part(g,'sphere',0xffffff, ex, ey, ez-s*0.3, {sx:s*1.2, sy:s*1.2, sz:s*0.6});
+/* =====================================================================
+   像素精灵系统（2.5D 精髓：3D 场景 + 像素人物）
+   16×16 程序化像素图 → CanvasTexture → 面向镜头的 Sprite。
+   每只：前/后/侧三向，左右共用侧图镜像；走路为双帧（整体下沉+脚部错位）。
+   ===================================================================== */
+const PX_OUTLINE = '#241c20';
+const PIXEL_ART = {
+  ditto: { h:1.0, pal:{p:'#d99cc8', d:'#c78bc0', e:'#4a2840'},
+    front:[
+      '.....kkkkkk.....','....kppppppk....','...kppppppppk...','..kppppppppppk..',
+      '..kpkpppppkppk..','..kpkpppppkppk..','..kppppppppppk..','..kppeeeeppppk..',
+      '..kpppkkkppppk..','..kdppppppppdk..','...kdddddddk....','....kkkkkkk.....' ],
+    back:[
+      '.....kkkkkk.....','....kppppppk....','...kppppppppk...','..kppppppppppk..',
+      '..kppppppppppk..','..kppppppppppk..','..kppppppppppk..','..kppppppppppk..',
+      '..kppppppppppk..','..kdppppppppdk..','...kdddddddk....','....kkkkkkk.....' ],
+    side:[
+      '................','.....kkkkkk.....','....kppppppk....','...kppppppppk...',
+      '..kpppppppppk...','..kpkppppppppk..','..kpkppppppppk..','..kpppppppppk...',
+      '..kpppeeeppppk..','..kdppppppppdk..','...kdddddddk....','....kkkkkkk.....' ] },
+  diglett: { h:0.78, pal:{p:'#a87a50', d:'#8a5e38', n:'#e88aa0', m:'#7a4636'},
+    front:[
+      '................','......kkkk......','.....kppppk.....','....kppppppk....',
+      '...kppppppppk...','...kpkppppkpk...','...kpkppppkpk...','...kpppnnpppk...',
+      '...kpppnnpppk...','...kpppmmpppk...','...kppppppppk...','..kddppppppddk..',
+      '.kdddkkkkkdddk..','.kddk.....kddk..','..kk.......kk...','................' ],
+    back:[
+      '................','......kkkk......','.....kppppk.....','....kppppppk....',
+      '...kppppppppk...','...kppppppppk...','...kppppppppk...','...kppppppppk...',
+      '...kppppppppk...','...kppppppppk...','...kppppppppk...','..kddppppppddk..',
+      '.kdddkkkkkdddk..','.kddk.....kddk..','..kk.......kk...','................' ],
+    side:[
+      '................','......kkkk......','.....kppppk.....','....kppppppk....',
+      '...kppppppppk...','...kpppkppppk...','...kpppkppppk...','...kpppnnppk....',
+      '...kpppnnppk....','...kpppmmppk....','...kpppppppk....','..kddppppppk....',
+      '.kdddkkkkkddk...','.kddk....kddk...','..kk......kk....','................' ] },
+  squirtle: { h:1.05, pal:{p:'#7ec8e8', d:'#58a0c0', a:'#f2e8c8', s:'#8a5a2b', t:'#a87848'},
+    front:[
+      '................','....kkkkkk......','...kppppppk.....','..kpwkppkwpk....',
+      '..kppppppppk....','..kppkaakppk....','...kppppppk.....','..kkkkkkkkkk....',
+      '.ksskssksskssk..','.kaapsskpspaak..','.kaapksskppkak..','..kkkssksskkk...',
+      '...kpppppppk....','...kpk...kpk....','...kk.....kk....','................' ],
+    back:[
+      '................','....kkkkkk......','...kppppppk.....','..kppppppppk....',
+      '..kppppppppk....','..kppppppppk....','...kppppppk.....','..kkkkkkkkkk....',
+      '.ksssssssssssk..','.ksttsskssttsk..','.ksskttkktkssk..','..kksssssskkk...',
+      '...kpppkppk.....','...kpk...kpk....','...kk.....kk....','................' ],
+    side:[
+      '................','....kkkkkk......','...kppppppk.....','..kpwkpppppk....',
+      '..kppppppppk....','..kpppkaakpk....','...kppppak......','..kkkkkkkkkk....',
+      '.kssskssksssk...','.kaapksskpspaak.','.kakpksskpkka...','..kkkssskssk....',
+      '...kpppppk......','...kpk..kpk.....','...kk....kk.....','................' ] },
+  scyther: { h:1.3, pal:{p:'#58c858', d:'#3f9a3f', a:'#f2e8c8', w:'#a8e8c8', e:'#d03030'},
+    front:[
+      '.......kk.......','......kppk......','.....kppppk.....','.....kepepek....',
+      '....kppppppk....','...kkppppppkk...','..kakpkppkpkak..','.kakakpkppkpkak.',
+      '.kak.kpppppk.k..','..k.kappppak.k..','....kpkppkpk....','....kpkppkpk....',
+      '...kppk..kppk...','...kdk....kdk...','....kk....kk....','................' ],
+    back:[
+      '.......kk.......','......kppk......','.....kppppk.....','.....kppppk.....',
+      '....kppppppk....','...kkppwwppkk...','..kakpkwwkpkak..','.kakakpwwkpkak..',
+      '.kak.kpwwpk.k...','..k.kappppak.k..','....kpkppkpk....','....kpkppkpk....',
+      '...kppk..kppk...','...kdk....kdk...','....kk....kk....','................' ],
+    side:[
+      '.......kk.......','......kppk......','.....kpppek.....','.....kppppk.....',
+      '....kpppppk.....','....kppwwkk.....','...kapwkkak.....','...kakkkkak.....',
+      '...kakkaak......','....kkappak.....','....kpkkakk.....','...kppk..kk.....',
+      '...kdpk.........','...kdk..kk......','....kk..........','................' ] },
+  geodude: { h:0.95, pal:{p:'#9a8a86', d:'#7a6c68', e:'#333333'},
+    front:[
+      '................','.....kkkkkk.....','....kppppppk....','...kppdppdppk...',
+      '..kppppppppppk..','..kpekpppkeppk..','..kppppppppppk..','..kppppppppppk..',
+      '..kpkdddddkppk..','..kppppppppppk..','...kppppppppk...','..kppk.k.kppk...',
+      '.kppk.k.k.kppk..','.kpk.......kpk..','.kdk.......kdk..','..kk.......kk...' ],
+    back:[
+      '................','.....kkkkkk.....','....kppppppk....','...kppdppdppk...',
+      '..kppdppppdppk..','..kppppppppppk..','..kppppppppppk..','..kppdppppdppk..',
+      '..kpkpppppkppk..','..kppppppppppk..','...kppppppppk...','..kppk.k.kppk...',
+      '.kppk.k.k.kppk..','.kpk.......kpk..','.kdk.......kdk..','..kk.......kk...' ],
+    side:[
+      '................','.....kkkkkk.....','....kppppppk....','...kppdppdppk...',
+      '..kppppppdpppk..','..kppkeppppppk..','..kppppppdpppk..','..kppppppppppk..',
+      '..kpkddddkpppk..','..kppppppppppk..','...kppppppppk...','..kppk.k.kpppk..',
+      '.kppk.k.k.kppk..','.kpk.......kpk..','.kdk.......kdk..','..kk.......kk...' ] },
+  bulbasaur: { h:1.0, pal:{p:'#5fc8b8', d:'#3f9a90', g:'#4a9a5a', G:'#3d8548', e:'#d03030'},
+    front:[
+      '......kkkk......','.....kggggk.....','....kgGggGgk....','...kggggggggk...',
+      '..kkkkkkkkkkkk..','..kpepppppepk...','..kpppppppppk...','..kppkddddkppk..',
+      '..kppppppppppk..','...kppppppppk...','...kpk....kpk...','...kpk....kpk...',
+      '..kdpk....kpdk..','..kppk....kppk..','...kk......kk...','................' ],
+    back:[
+      '......kkkk......','.....kggggk.....','....kggggggk....','...kggggggggk...',
+      '..kkkkkkkkkkkk..','..kpppppppppk...','..kppdppppdppk..','..kpppppppppk...',
+      '..kppppdppppk...','...kppppppppk...','...kpk....kpk...','...kpk....kpk...',
+      '..kdpk....kpdk..','..kppk....kppk..','...kk......kk...','................' ],
+    side:[
+      '......kkkk......','.....kggggk.....','....kgGggGgk....','...kgggggggk....',
+      '..kkkkkkkkkkk...','..kpeppppppk....','..kppppdpppk....','..kppkdddppk....',
+      '..kpppppppppk...','...kppppppppk...','...kpk...kpk....','...kpk...kpk....',
+      '..kdpk...kpdk...','..kppk...kppk...','...kk.....kk....','................' ] },
+  pikachu: { h:1.08, pal:{y:'#f8d030', d:'#d8a820', b:'#3a2a1a', r:'#e05050', k:'#241c20'},
+    front:[
+      '..kk.......kk...','.kbbk.....kbbk..','.kbyk.....kybk..','..kyk.....kyk...',
+      '..kyykkkkkyyk...','..kyyyyyyyyyk...','.kykwyyykwyky...','.kyykyyykyyyk...',
+      '.kyryykykyyryk..','.kyyykkkkyyyk...','..kyyyyyyyyyk...','..kybyyyybyk....',
+      '..kyyyyyyyyk....','...kyyk.kyyk....','...kyk...kyk....','....kk....kk....' ],
+    back:[
+      '..kk.......kk...','.kbbk.....kbbk..','.kbyk.....kybk..','..kyk.....kyk...',
+      '..kyykkkkkyyk...','..kyyyyyyyyyk...','..kyyyyyyyyyk...','..kyyyyyyyyyk...',
+      '..kyybyybyyyk...','..kybbbbbbbyk...','..kyyyyyyyyyk...','..kybyyyybyk....',
+      '..kyyyyyyyyk....','...kyyk.kyyk....','...kyk...kyk....','....kk....kk....' ],
+    side:[
+      '..kk............','.kbbk...........','.kbyk...........','..kyk...........',
+      '..kyykkkkkk.....','..kyyyyyyyykk...','..kyyykwyyyyk...','..kyyyykyyyyk...',
+      '..kyyyyyykyyk...','..kyyykkkyyyk...','..kyyyyyyyyyk...','..kybyyyybyk....',
+      '..kyyyyyyyyk....','...kyyk.kyyk....','...kyk...kyk....','....kk....kk....' ] },
+  eevee: { h:1.0, pal:{p:'#c89a68', d:'#a87c48', a:'#f2e0c0', e:'#6a4020'},
+    front:[
+      '..kk.......kk...','..kpk.....kpk...','..kek.....kek...','..kpk.....kpk...',
+      '..kppkkkkkppk...','..kpaappppaak...','.kppwppppwppk...','.kppkppppkpppk..',
+      '.kppppkkkppppk..','.kpkppaaappkpk..','..kpppppppppk...','..kpdpppppdpk...',
+      '...kpppppppk....','...kpk...kpk....','...kk.....kk....','................' ],
+    back:[
+      '..kk.......kk...','..kpk.....kpk...','..kek.....kek...','..kpk.....kpk...',
+      '..kppkkkkkppk...','..kpppppppppk...','..kpppppppppk...','..kppdppppdppk..',
+      '..kpppppppppk...','..kpdpppppdpk...','..kpppppppppk...','..kpdpppppdpk...',
+      '...kpppppppk....','...kpk...kpk....','...kk.....kk....','................' ],
+    side:[
+      '..kk............','..kpk...........','..kek...........','..kpk...........',
+      '..kppkkkkkk.....','..kpaappppppk...','..kpwpppppppk...','..kpppkppppppk..',
+      '..kppppkkppppk..','..kpkppaaappk...','..kpppppppppk...','..kpdpppppdpk...',
+      '...kpppppppk....','...kpk...kpk....','...kk.....kk....','................' ] },
+  charmander: { h:1.05, pal:{p:'#e89040', d:'#c87028', a:'#f8e0b0', f:'#f05030', F:'#ffd75e'},
+    front:[
+      '........ff......','.......kFfk.....','..kk...kFfk.....','..kpk..kfpk.....',
+      '.kppkkkkppk.....','.kpwkppkwpk.....','.kpppppppppk....','.kpppkkkpppk....',
+      '.kpaaaaaappk....','.kpaaaaaappk....','..kpppppppk.....','..kpdpk.kpdk....',
+      '..kppk.kppk.....','...kk...kk......','................','................' ],
+    back:[
+      '........ff......','.......kFfk.....','..kk...kFfk.....','..kpk..kfpk.....',
+      '.kppkkkkppk.....','.kpppppppppk....','.kpppppppppk....','.kppdppppppk....',
+      '.kpaaaaaappk....','.kpaaaaaappk....','..kpppppppk.....','..kpdpk.kpdk....',
+      '..kppk.kppk.....','...kk...kk......','................','................' ],
+    side:[
+      '........ff......','.......kFfk.....','..kk...kfpk.....','..kpk..kkk......',
+      '.kppkkkkppk.....','.kpwkppppppk....','.kppppppppk.....','.kpppkkkppk.....',
+      '.kpaaaaaapk.....','.kpaaaaaapk.....','..kpppppppk.....','..kpdpk.kpk.....',
+      '..kppk..kpk.....','...kk....kk.....','................','................' ] },
+  snorlax: { h:1.32, pal:{p:'#4a7a6a', a:'#f2e0c0', d:'#3a5a4a', w:'#ffffff'},
+    front:[
+      '................','...kk.....kk....','..kppk...kppk...','..kppkkkkkppk...',
+      '..kpaappppaak...','..kaaaaaaaaak...','..kpk aaa kpk...','.kpkkkkkkkkpk...',
+      'kppkaaaaaappk...','kppkaa w kaapk..','kppkaaaaaappk...','kppkaaaaaappk...',
+      '.kppppppppppk...','..kpak..kapk....','..kaak..kaak....','...kk....kk.....' ],
+    back:[
+      '................','...kk.....kk....','..kppk...kppk...','..kppkkkkkppk...',
+      '..kpppppppppk...','..kpppppppppk...','..kppdpppdppk...','..kpppppppppk...',
+      'kpppppdppppppk..','kppppppppppppk..','kpppdppppdpppk..','kppppppppppppk..',
+      '.kppppppppppk...','..kpak..kapk....','..kaak..kaak....','...kk....kk.....' ],
+    side:[
+      '................','...kk...........','..kppk..........','..kppkkkkkk.....',
+      '..kpaapppppk....','..kaaaaaappk....','..kpk aaappk....','.kpkkkkkappk....',
+      'kppkaaaaappk....','kppka wkaapk....','kppkaaaaaapk....','kpppaaaaaapk....',
+      '.kpppppppppk....','..kpak.kapk.....','..kaak.kaak.....','...kk...kk......' ] },
+  pidgey: { h:0.92, pal:{p:'#c8a068', d:'#a87c44', a:'#f2e4c8', b:'#38302a', k:'#241c20'},
+    front:[
+      '................','......kkkk......','.....kppppk.....','....kpdkkdkp....',
+      '....kpppppppk...','....kpdbdbppk...','....kppppppk....','.....kppppk.....',
+      '...kkpppppkk....','..kpdkaaakdpk...','..kdkpaaaapkd...','...kppppppk.....',
+      '....kabba k.....','....kbbk........','.....kbk........','......kk........' ],
+    back:[
+      '................','......kkkk......','.....kppppk.....','....kpdkkdkp....',
+      '....kppppppk....','....kppppppk....','....kpdppdpk....','.....kppppk.....',
+      '...kkpppppkk....','..kpdkppppkdk...','..kdkppppppkd...','...kppppppk.....',
+      '....kppbppk.....','....kbbbk.......','.....kbk........','......kk........' ],
+    side:[
+      '................','......kkkk......','.....kppppk.....','....kpdkpdk.....',
+      '....kppppppk....','....kpdbdbpk....','....kppppppbb...','.....kppppkbk...',
+      '...kkpppppkbk...','..kpdkaakppbk...','..kdkpaaaapk....','...kppppppk.....',
+      '....kabbaak.....','....kbbbk.......','.....kbk........','......kk........' ] },
+  magnemite: { h:0.9, pal:{p:'#b8bec8', d:'#8a9098', r:'#d84a3a', b:'#4a6ad8', u:'#3a5ac8'},
+    front:[
+      '................','......kkkk......','.....kppppk.....','....kpuuuppk....',
+      '....kpuwuppk....','....kpuuuppk....','....kppppppk....','..kkkppppppkkk..',
+      '.kpdkkddddkkpdk.','.krpk.kppk.kbpk.','.krpk.kppk.kbpk.','.kddk.kppk.kddk.',
+      '..kk..kddk..kk..','......kkkk......','................','................' ],
+    back:[
+      '................','......kkkk......','.....kppppk.....','....kppppppk....',
+      '....kppdpppk....','....kppppppk....','....kppppppk....','..kkkppppppkkk..',
+      '.kpdkkddddkkpdk.','.krpk.kppk.kbpk.','.krpk.kppk.kbpk.','.kddk.kppk.kddk.',
+      '..kk..kddk..kk..','......kkkk......','................','................' ],
+    side:[
+      '................','......kkkk......','.....kppppk.....','....kpuupppk....',
+      '....kpuwuppk....','....kpuuuppk....','....kppppppkk...','..kkkpppppkpdk..',
+      '.kpdkkddddkpdk..','.krpk.kppk.kbdk.','.krpk.kppk.kddk.','.kddk.kddk..kk..',
+      '..kk..kkkk......','......kkkk......','................','................' ] },
+  oddish: { h:0.88, pal:{p:'#5878d8', d:'#3a68c8', g:'#4aa85c', G:'#3f8a4e', e:'#d03030'},
+    front:[
+      '................','....kkkkkkkk....','...kg.gGG.gk....','..kggkkgggkkg...',
+      '..kgg.kkgk.gg...','...kkkkkkkkk....','...kppppppppk...','..kpkepppeppk...',
+      '..kpepppppepk...','..kppppkppppk...','..kpppppppppk...','..kdpppppppdk...',
+      '..kdpppppppdk...','...kkkkkkkkk....','...kdk....kdk...','...kk......kk...' ],
+    back:[
+      '................','....kkkkkkkk....','...kgggggggk....','..kgggggggggk...',
+      '..kgggggggggk...','...kkkkkkkkk....','...kppppppppk...','..kppppppppppk..',
+      '..kpppppppppk...','..kppdppppdpk...','..kpppppppppk...','..kdpppppppdk...',
+      '..kdpppppppdk...','...kkkkkkkkk....','...kdk....kdk...','...kk......kk...' ],
+    side:[
+      '................','....kkkkkkkk....','...kg.gGGkgk....','..kggkkgggkk....',
+      '..kgg.kkgk.k....','...kkkkkkkkk....','...kpppppppk....','..kpkepppepk....',
+      '..kpeppppppk....','..kppppkpppk....','..kppppppppk....','..kdppppppdk....',
+      '..kdppppppdk....','...kkkkkkkkk....','...kdk...kdk....','...kk.....kk....' ] },
+  psyduck: { h:1.0, pal:{p:'#f2e0b0', d:'#d8b86a', b:'#e89838', B:'#d07828', k:'#241c20'},
+    front:[
+      '......k.k.......','.....kdkdk......','....kdkdkdk.....','.....kkkkk......',
+      '....kppppppk....','...kpwpppwppk...','...kppppppppk...','...kbbbbbbbbk...',
+      '...kBbbbbbbBk...','....kppppppk....','..kpkppppppkpk..','..kpkppppppkpk..',
+      '...kppppppppk...','....kppkppk.....','....kbpk.kbk....','.....kk...kk....' ],
+    back:[
+      '......k.k.......','.....kdkdk......','....kdkdkdk.....','.....kkkkk......',
+      '....kppppppk....','...kppppppppk...','...kppppppppk...','...kppppppppk...',
+      '...kppppppppk...','....kppppppk....','..kpkppppppkpk..','..kpkppppppkpk..',
+      '...kppppppppk...','....kppkppk.....','....kbpk.kbk....','.....kk...kk....' ],
+    side:[
+      '......k.k.......','.....kdkdk......','....kdkdkdk.....','.....kkkkk......',
+      '....kppppppk....','...kpwpppppk....','...kpppppppk....','...kbbbbbbbb....',
+      '...kBbbbbbbk....','....kppppppk....','..kpkpppppkpk...','..kpkppppppkpk..',
+      '...kppppppppk...','....kppkppk.....','....kbpk.kbk....','.....kk...kk....' ] },
+  meowth: { h:1.0, pal:{p:'#f2e0c0', d:'#d8c8a8', g:'#e8c020', e:'#c89818', n:'#c89078', B:'#8a5a30'},
+    front:[
+      '...kk.....kk....','..kppk...kppk...','..kepk...kpek...','..kppkkBkkppk...',
+      '..kppkggkpppk...','..kppkggkpppk...','..kpppppppppk...','.kpwkpppppkwpk..',
+      '.kppkppppkpppk..','.kpkkkaakkkppk..','.kpdpknnkpdpk...','..kpkpkkkpkkpk..',
+      '..kpkpppppkkpk..','...kpppppppk....','...kdpk.kpdk....','....kk...kk.....' ],
+    back:[
+      '...kk.....kk....','..kppk...kppk...','..kepk...kpek...','..kppkkkkkppk...',
+      '..kpppppppppk...','..kpppppppppk...','..kpppppppppk...','..kppdppppdppk..',
+      '..kpppppppppk...','..kpdpppppdpk...','..kpppppppppk...','..kpkpppppkppk..',
+      '..kpkpppppkppk..','...kpppppppk....','...kdpk.kpdk....','....kk...kk.....' ],
+    side:[
+      '...kk...........','..kppk..........','..kepk..........','..kppkkkkk......',
+      '..kppppggk......','..kpppkggk......','..kpppppppk.....','..kpwkppppk.....',
+      '..kppkpppppk....','..kpkkkaaakk....','..kpdpknnkpk....','..kpkpkkkppk....',
+      '..kpkppppppk....','...kppppppk.....','...kdpk.kpk.....','....kk...kk.....' ] },
+};
+/* 行末补齐到 16 列，容错短行 */
+function pxRow(row){ return (row+'................').slice(0,16); }
+const pxCanvasCache = new Map();
+function pxCanvas(id, dirName, frame){
+  const key = id+'|'+dirName+'|'+frame;
+  if (pxCanvasCache.has(key)) return pxCanvasCache.get(key);
+  const def = PIXEL_ART[id];
+  const pal = Object.assign({k:PX_OUTLINE, w:'#ffffff'}, def ? def.pal : {});
+  let base = (def && (def[dirName] || def.front)) || PIXEL_ART.ditto.front;
+  let rows = base.map(pxRow);
+  if (frame===1){ // 走路帧：整体下沉 1px + 脚部行错位
+    rows = ['................'].concat(rows.slice(0,15));
+    rows[15] = rows[15].slice(2) + rows[15].slice(0,2);
+    if (rows[14]) rows[14] = rows[14].slice(14) + rows[14].slice(0,14);
   }
-  const left = part(g,'sphere',0x1a1a1a, -ex, ey, ez, {sx:s, sy:s, sz:s*0.65});
-  const right = part(g,'sphere',0x1a1a1a, ex, ey, ez, {sx:s, sy:s, sz:s*0.65});
-  // 高光点：让眼睛"有神"的关键
-  part(g,'sphere',0xffffff, -ex-s*0.28, ey+s*0.3, ez+s*0.45, {sx:s*0.3, sy:s*0.3, sz:s*0.18});
-  part(g,'sphere',0xffffff, ex-s*0.28, ey+s*0.3, ez+s*0.45, {sx:s*0.3, sy:s*0.3, sz:s*0.18});
-  if (opts.cheek){
-    part(g,'sphere',opts.cheek, -ex-s*0.85, ey-s*0.8, ez+0.06, {sx:s*0.75, sy:s*0.58, sz:s*0.4});
-    part(g,'sphere',opts.cheek, ex+s*0.85, ey-s*0.8, ez+0.06, {sx:s*0.75, sy:s*0.58, sz:s*0.4});
+  const mirror = dirName==='left';
+  const cnv = document.createElement('canvas');
+  cnv.width = 16; cnv.height = 16;
+  const ctx = cnv.getContext('2d');
+  for (let y=0;y<rows.length;y++){
+    for (let x=0;x<16;x++){
+      const ch = rows[y][mirror ? 15-x : x];
+      const col = pal[ch];
+      if (!col) continue;
+      ctx.fillStyle = col;
+      ctx.fillRect(x, y, 1, 1);
+    }
   }
-  if (opts.smile){ // 小张嘴（深色椭圆，比圆环嘴可爱）
-    part(g,'sphere',0x5a3428, 0, opts.mouthY!=null?opts.mouthY:ey-s*1.6, ez+s*0.1, {sx:s*0.95, sy:s*0.5, sz:s*0.35});
-  }
-  if (opts.nose){
-    part(g,'sphere',opts.nose, 0, opts.noseY!=null?opts.noseY:ey-s*0.7, ez+s*0.62, {sx:s*0.32, sy:s*0.24, sz:s*0.26});
-  }
-  return {left, right};
+  pxCanvasCache.set(key, cnv);
+  return cnv;
 }
-/* 耳朵：外耳锥 + 前侧内耳（深色），告别"光杆圆锥" */
-function addEar(g, x, y, z, sx, sy, sz, outer, inner, rz){
-  part(g,'cone',outer, x,y,z, {sx, sy, sz, rz: rz||0});
-  if (inner) part(g,'cone',inner, x, y+sy*0.02, z+sz*0.32, {sx:sx*0.5, sy:sy*0.5, sz:sz*0.4, rz: rz||0});
+const pixelTexCache = new Map();
+function pixelTexture(id, dirName, frame){
+  const key = id+'|'+dirName+'|'+frame;
+  let tex = pixelTexCache.get(key);
+  if (tex) return tex;
+  tex = new THREE.CanvasTexture(pxCanvas(id, dirName, frame));
+  tex.magFilter = THREE.NearestFilter;
+  tex.minFilter = THREE.NearestFilter;
+  tex.generateMipmaps = false;
+  pixelTexCache.set(key, tex);
+  return tex;
+}
+/* 像素图编号：front/back/side（side 朝右，left 用镜像） */
+function setSpriteFacing(g, dirName){
+  if (!g || !g.userData.sprite || g.userData.dir===dirName) return;
+  g.userData.dir = dirName;
+  g.userData.sprite.material.map = pixelTexture(g.userData.id, dirName, g.userData.frame);
+  g.userData.sprite.material.needsUpdate = true;
+}
+function setSpriteFrame(g, frame){
+  frame = frame ? 1 : 0;
+  if (!g || !g.userData.sprite || g.userData.frame===frame) return;
+  g.userData.frame = frame;
+  g.userData.sprite.material.map = pixelTexture(g.userData.id, g.userData.dir, frame);
+  g.userData.sprite.material.needsUpdate = true;
+}
+/* 朝向角（atan2(dx,dz)）→ 四向像素图 */
+function facingToDir(angle){
+  const s = Math.sin(angle||0), c = Math.cos(angle||0);
+  if (Math.abs(s) > Math.abs(c)) return s>0 ? 'right' : 'left';
+  return c>0 ? 'front' : 'back';
 }
 /* 脚下半透明阴影盘：共享几何与材质，给精灵接地感 */
 const POKEMON_SHADOW_R = {ditto:0.4, diglett:0.32, squirtle:0.42, scyther:0.38, geodude:0.44,
@@ -2058,313 +2327,21 @@ function addShadow(g, id){
   s.position.y = 0.035;
   g.add(s);
 }
+/* 各精灵的世界高度（16×16 像素图按此高度渲染，脚底接地） */
+const POKEMON_H = {ditto:1.15, diglett:0.9, squirtle:1.2, scyther:1.45, geodude:1.1,
+  bulbasaur:1.15, pikachu:1.25, eevee:1.15, charmander:1.2, snorlax:1.5, pidgey:1.05,
+  magnemite:1.05, oddish:1.0, psyduck:1.15, meowth:1.15};
 function buildPokemon(id){
   const g = new THREE.Group();
   g.userData.id = id;
-  switch(id){
-    case 'ditto': {
-      const body = part(g,'sphere',0xd99cc8, 0, 0.45, 0, {sx:0.55, sy:0.5, sz:0.5});
-      part(g,'sphere',0xc78bc0, 0, 0.24, 0.06, {sx:0.46, sy:0.16, sz:0.42}); // 底部沉淀色
-      // 垂坠小胳膊
-      part(g,'sphere',0xd99cc8, -0.44, 0.34, 0.12, {sx:0.13, sy:0.2, sz:0.13});
-      part(g,'sphere',0xd99cc8, 0.44, 0.34, 0.12, {sx:0.13, sy:0.2, sz:0.13});
-      addFace(g, 0x222222, {ey:0.5, ez:0.44, ex:0.16, s:0.07, white:true, smile:true, mouthY:0.34});
-      g.userData.body = body;
-      break;
-    }
-    case 'diglett': {
-      const mound = part(g,'cone',0x9c6b43, 0, 0.28, 0, {sx:0.7, sy:0.45, sz:0.7});
-      const head = part(g,'sphere',0xa87a50, 0, 0.55, 0, {sx:0.42, sy:0.42, sz:0.42});
-      part(g,'sphere',0xe88aa0, 0, 0.5, 0.38, {sx:0.11, sy:0.09, sz:0.09}); // 圆粉鼻贴在脸面
-      addFace(g, 0x222222, {ey:0.66, ez:0.36, ex:0.12, s:0.055, white:true});
-      part(g,'sphere',0x7a4636, 0, 0.4, 0.36, {sx:0.09, sy:0.06, sz:0.05}); // 张嘴笑
-      g.userData.mound = mound; g.userData.head = head;
-      break;
-    }
-    case 'squirtle': {
-      const body = part(g,'sphere',0x7ec8e8, 0, 0.42, 0, {sx:0.5, sy:0.5, sz:0.5});
-      part(g,'sphere',0xf2e8c8, 0, 0.4, 0.32, {sx:0.38, sy:0.34, sz:0.14}); // 肚皮
-      const shell = part(g,'sphere',0x8a5a2b, 0, 0.5, -0.3, {sx:0.42, sy:0.44, sz:0.32});
-      // 龟壳边圈 + 背甲纹路
-      const rim = part(g,'torus',0xf2e8c8, 0, 0.5, -0.22, {sx:2.0, sy:2.0, sz:2.4});
-      rim.rotation.x = Math.PI/2;
-      part(g,'sphere',0xa87848, -0.12, 0.6, -0.48, {sx:0.09, sy:0.09, sz:0.07});
-      part(g,'sphere',0xa87848, 0.14, 0.54, -0.52, {sx:0.08, sy:0.08, sz:0.07});
-      part(g,'sphere',0xa87848, 0, 0.4, -0.56, {sx:0.09, sy:0.09, sz:0.07});
-      const head = part(g,'sphere',0x7ec8e8, 0, 0.9, 0.16, {sx:0.4, sy:0.4, sz:0.4});
-      part(g,'sphere',0x7ec8e8, 0, 0.84, 0.5, {sx:0.13, sy:0.09, sz:0.1});  // 吻部
-      addFace(g, 0x222222, {ey:0.98, ez:0.5, ex:0.14, s:0.095, white:true, mouthY:0.8, smile:true});
-      const tail = part(g,'torus',0x7ec8e8, -0.34, 0.55, -0.3, {sx:1, sy:1, sz:1});
-      tail.rotation.y = Math.PI/2;
-      part(g,'sphere',0x7ec8e8, -0.4, 0.42, 0.02, {sx:0.1, sy:0.1, sz:0.12}); // 小手
-      part(g,'sphere',0x7ec8e8, 0.4, 0.42, 0.02, {sx:0.1, sy:0.1, sz:0.12});
-      part(g,'cyl',0x7ec8e8, -0.24, 0.12, -0.1, {sx:0.5, sy:0.4, sz:0.5});
-      part(g,'cyl',0x7ec8e8, 0.24, 0.12, -0.1, {sx:0.5, sy:0.4, sz:0.5});
-      g.userData.tail = tail; g.userData.body = body; g.userData.head = head; g.userData.shell = shell;
-      break;
-    }
-    case 'scyther': {
-      const body = part(g,'sphere',0x58c858, 0, 0.6, 0, {sx:0.4, sy:0.6, sz:0.3});
-      const head = part(g,'sphere',0x58c858, 0, 1.12, 0.1, {sx:0.26, sy:0.3, sz:0.26});
-      part(g,'cone',0x58c858, 0, 1.42, 0.14, {sx:0.12, sy:0.3, sz:0.12}); // 头冠
-      addFace(g, 0xffffff, {ey:1.16, ez:0.3, ex:0.1, s:0.085, white:true});
-      // 镰刀前臂：基臂 + 子部件刀刃（随挥舞动画一起摆动）
-      const armL = part(g,'box',0xf2e8c8, -0.42, 0.78, 0.28, {sx:0.5, sy:0.1, sz:0.12});
-      const edgeL = part(g,'box',0xd8f0d8, -0.66, 0.78, 0.3, {sx:0.2, sy:0.05, sz:0.08});
-      const tipL = part(g,'box',0xf2e8c8, -0.58, 0.88, 0.3, {sx:0.16, sy:0.08, sz:0.06, rz:0.45});
-      armL.add(edgeL); edgeL.position.set(-0.2, 0, 0.02);
-      armL.add(tipL); tipL.position.set(-0.16, 0.08, 0.02);
-      const armR = part(g,'box',0xf2e8c8, 0.42, 0.78, 0.28, {sx:0.5, sy:0.1, sz:0.12});
-      const edgeR = part(g,'box',0xd8f0d8, 0.66, 0.78, 0.3, {sx:0.2, sy:0.05, sz:0.08});
-      const tipR = part(g,'box',0xf2e8c8, 0.58, 0.88, 0.3, {sx:0.16, sy:0.08, sz:0.06, rz:-0.45});
-      armR.add(edgeR); edgeR.position.set(0.2, 0, 0.02);
-      armR.add(tipR); tipR.position.set(0.16, 0.08, 0.02);
-      const wingL = part(g,'box',0xa8e8c8, -0.3, 0.9, -0.2, {sx:0.28, sy:0.16, sz:0.06, transparent:true, opacity:0.7});
-      const veinL = part(g,'box',0x7ac8a0, -0.3, 0.9, -0.19, {sx:0.24, sy:0.02, sz:0.02});
-      wingL.add(veinL); veinL.position.set(0, 0, 0.01);
-      const wingR = part(g,'box',0xa8e8c8, 0.3, 0.9, -0.2, {sx:0.28, sy:0.16, sz:0.06, transparent:true, opacity:0.7});
-      const veinR = part(g,'box',0x7ac8a0, 0.3, 0.9, -0.19, {sx:0.24, sy:0.02, sz:0.02});
-      wingR.add(veinR); veinR.position.set(0, 0, 0.01);
-      part(g,'cyl',0x58c858, -0.2, 0.2, 0, {sx:0.4, sy:0.4, sz:0.4});
-      part(g,'cyl',0x58c858, 0.2, 0.2, 0, {sx:0.4, sy:0.4, sz:0.4});
-      g.userData.armL = armL; g.userData.armR = armR;
-      g.userData.wingL = wingL; g.userData.wingR = wingR; g.userData.body = body;
-      break;
-    }
-    case 'geodude': {
-      const body = part(g,'dod',0x9a8a86, 0, 0.55, 0, {sx:0.5, sy:0.5, sz:0.5});
-      part(g,'ico',0x8a7a76, -0.3, 0.75, 0, {sx:0.2, sy:0.16, sz:0.2});
-      part(g,'ico',0x8a7a76, 0.32, 0.6, -0.1, {sx:0.16, sy:0.14, sz:0.16});
-      part(g,'cyl',0x7a6c68, 0, 0.82, 0, {sx:0.16, sy:0.06, sz:0.16}); // 头顶凹坑
-      addFace(g, 0x333333, {ey:0.6, ez:0.44, ex:0.14, s:0.06, white:true});
-      part(g,'box',0x6a5c58, -0.14, 0.7, 0.42, {sx:0.13, sy:0.028, sz:0.03}); // 眉骨
-      part(g,'box',0x6a5c58, 0.14, 0.7, 0.42, {sx:0.13, sy:0.028, sz:0.03});
-      part(g,'box',0x5a4e4a, 0, 0.47, 0.46, {sx:0.1, sy:0.02, sz:0.02});      // 抿嘴
-      const armL = part(g,'sphere',0x9a8a86, -0.55, 0.5, 0.1, {sx:0.24, sy:0.24, sz:0.24});
-      part(g,'sphere',0x8a7a76, -0.6, 0.42, 0.24, {sx:0.07, sy:0.07, sz:0.07}); // 拳峰
-      const armR = part(g,'sphere',0x9a8a86, 0.55, 0.5, 0.1, {sx:0.24, sy:0.24, sz:0.24});
-      part(g,'sphere',0x8a7a76, 0.6, 0.42, 0.24, {sx:0.07, sy:0.07, sz:0.07});
-      g.userData.armL = armL; g.userData.armR = armR; g.userData.body = body;
-      break;
-    }
-    case 'bulbasaur': {
-      const body = part(g,'sphere',0x5fc8b8, 0, 0.4, 0, {sx:0.5, sy:0.48, sz:0.5});
-      // 身上深色斑纹
-      part(g,'sphere',0x3f9a90, -0.2, 0.46, -0.14, {sx:0.12, sy:0.15, sz:0.1});
-      part(g,'sphere',0x3f9a90, 0.18, 0.52, -0.02, {sx:0.1, sy:0.12, sz:0.1});
-      part(g,'sphere',0x3f9a90, 0.02, 0.3, 0.32, {sx:0.1, sy:0.08, sz:0.07});
-      const bulb = part(g,'sphere',0x4a9a5a, 0, 0.74, -0.3, {sx:0.3, sy:0.3, sz:0.3});
-      part(g,'sphere',0x3d8548, 0, 0.6, -0.3, {sx:0.22, sy:0.12, sz:0.22}); // 球茎基部
-      const leaf1 = part(g,'cone',0x3f8a4e, -0.13, 0.98, -0.3, {sx:0.11, sy:0.26, sz:0.11});
-      const leaf2 = part(g,'cone',0x3f8a4e, 0.13, 0.98, -0.3, {sx:0.11, sy:0.26, sz:0.11});
-      const leaf3 = part(g,'cone',0x3f8a4e, 0, 0.9, -0.44, {sx:0.11, sy:0.24, sz:0.11});
-      part(g,'cone',0x3f8a4e, 0, 0.9, -0.16, {sx:0.1, sy:0.22, sz:0.1, rx:0.4}); // 第四片叶
-      const head = part(g,'sphere',0x5fc8b8, 0, 0.86, 0.14, {sx:0.36, sy:0.36, sz:0.36});
-      addEar(g, -0.29, 1.12, 0.14, 0.1, 0.2, 0.1, 0x5fc8b8, 0x3f9a90, 0.3);
-      addEar(g, 0.29, 1.12, 0.14, 0.1, 0.2, 0.1, 0x5fc8b8, 0x3f9a90, -0.3);
-      addFace(g, 0xd03030, {ey:0.92, ez:0.42, ex:0.13, s:0.08, white:true, nose:0x2a5a54, noseY:0.8});
-      part(g,'cyl',0x5fc8b8, -0.2, 0.1, 0.05, {sx:0.4, sy:0.3, sz:0.4});
-      part(g,'cyl',0x5fc8b8, 0.2, 0.1, 0.05, {sx:0.4, sy:0.3, sz:0.4});
-      g.userData.bulb = bulb; g.userData.body = body;
-      break;
-    }
-    case 'pikachu': {
-      const body = part(g,'sphere',0xf8d030, 0, 0.42, 0, {sx:0.46, sy:0.48, sz:0.46});
-      // 背部两道褐纹
-      part(g,'box',0xa87828, 0, 0.54, -0.4, {sx:0.26, sy:0.05, sz:0.09, rz:0.15});
-      part(g,'box',0xa87828, 0, 0.36, -0.43, {sx:0.3, sy:0.05, sz:0.09, rz:-0.1});
-      const head = part(g,'sphere',0xf8d030, 0, 0.92, 0.08, {sx:0.4, sy:0.4, sz:0.4});
-      addEar(g, -0.26, 1.3, 0.06, 0.13, 0.3, 0.13, 0xf8d030, null, 0.18);
-      addEar(g, 0.26, 1.3, 0.06, 0.13, 0.3, 0.13, 0xf8d030, null, -0.18);
-      part(g,'cone',0x3a2a1a, -0.31, 1.47, 0.06, {sx:0.085, sy:0.14, sz:0.085, rz:0.18}); // 黑耳尖
-      part(g,'cone',0x3a2a1a, 0.31, 1.47, 0.06, {sx:0.085, sy:0.14, sz:0.085, rz:-0.18});
-      addFace(g, 0x222222, {ey:1.0, ez:0.4, ex:0.15, s:0.095, white:true, cheek:0xe05050, nose:0x3a2a1a, noseY:0.9});
-      // 闪电形尾巴：枢纽盒 + 三段折角子部件（随摇尾动画一起摆）
-      const tail = part(g,'box',0xa87828, -0.34, 0.5, -0.26, {sx:0.08, sy:0.16, sz:0.08});
-      const seg1 = part(g,'box',0xf8d030, -0.34, 0.5, -0.26, {sx:0.1, sy:0.06, sz:0.3});
-      tail.add(seg1); seg1.position.set(-0.04, 0.12, 0);
-      const seg2 = part(g,'box',0xf8d030, -0.34, 0.5, -0.26, {sx:0.3, sy:0.06, sz:0.14});
-      tail.add(seg2); seg2.position.set(-0.18, 0.22, 0.02); seg2.rotation.z = 0.55;
-      const seg3 = part(g,'box',0xf8d030, -0.34, 0.5, -0.26, {sx:0.32, sy:0.07, sz:0.2});
-      tail.add(seg3); seg3.position.set(-0.36, 0.4, 0.04); seg3.rotation.z = -0.2;
-      part(g,'sphere',0xf8d030, -0.4, 0.46, 0.12, {sx:0.1, sy:0.1, sz:0.1}); // 小手
-      part(g,'sphere',0xf8d030, 0.4, 0.46, 0.12, {sx:0.1, sy:0.1, sz:0.1});
-      part(g,'cyl',0xf8d030, -0.18, 0.1, 0, {sx:0.4, sy:0.3, sz:0.4});
-      part(g,'cyl',0xf8d030, 0.18, 0.1, 0, {sx:0.4, sy:0.3, sz:0.4});
-      g.userData.tail = tail; g.userData.body = body; g.userData.head = head;
-      break;
-    }
-    case 'eevee': {
-      const body = part(g,'sphere',0xc89a68, 0, 0.42, 0, {sx:0.46, sy:0.48, sz:0.46});
-      part(g,'sphere',0xf2e0c0, 0, 0.55, 0.28, {sx:0.36, sy:0.32, sz:0.15}); // 胸前绒毛
-      // 颈部毛领（一圈奶白球）
-      for (let k=0;k<6;k++){
-        const a = k/6*Math.PI*2;
-        part(g,'sphere',0xf2e0c0, Math.cos(a)*0.27, 0.62, Math.sin(a)*0.2+0.08, {sx:0.1, sy:0.09, sz:0.1});
-      }
-      const head = part(g,'sphere',0xc89a68, 0, 0.9, 0.08, {sx:0.38, sy:0.38, sz:0.38});
-      addEar(g, -0.26, 1.3, 0.06, 0.15, 0.3, 0.13, 0xc89a68, 0x6a4020, 0.12);
-      addEar(g, 0.26, 1.3, 0.06, 0.15, 0.3, 0.13, 0xc89a68, 0x6a4020, -0.12);
-      part(g,'sphere',0xf2e0c0, 0, 0.82, 0.36, {sx:0.15, sy:0.11, sz:0.13}); // 吻部绒毛
-      addFace(g, 0x222222, {ey:0.96, ez:0.4, ex:0.13, s:0.09, white:true, nose:0x5a3a28, noseY:0.86});
-      part(g,'box',0x8a5a30, 0, 0.5, -0.38, {sx:0.22, sy:0.05, sz:0.12}); // 背部深纹
-      const tail = part(g,'cone',0xc89a68, -0.3, 0.68, -0.42, {sx:0.22, sy:0.42, sz:0.22, rx:-0.5});
-      part(g,'sphere',0xf2e0c0, -0.32, 0.47, -0.56, {sx:0.15, sy:0.15, sz:0.15}); // 蓬尾尖
-      part(g,'cyl',0xc89a68, -0.16, 0.1, 0, {sx:0.36, sy:0.3, sz:0.36});
-      part(g,'cyl',0xc89a68, 0.16, 0.1, 0, {sx:0.36, sy:0.3, sz:0.36});
-      g.userData.tail = tail; g.userData.body = body; g.userData.head = head;
-      break;
-    }
-    case 'charmander': {
-      const body = part(g,'sphere',0xe89040, 0, 0.42, 0, {sx:0.46, sy:0.5, sz:0.46});
-      part(g,'sphere',0xf8e0b0, 0, 0.38, 0.3, {sx:0.34, sy:0.32, sz:0.12}); // 肚皮
-      const head = part(g,'sphere',0xe89040, 0, 0.9, 0.1, {sx:0.38, sy:0.38, sz:0.38});
-      part(g,'sphere',0xe89040, 0, 0.82, 0.42, {sx:0.13, sy:0.1, sz:0.11}); // 吻部
-      addEar(g, -0.2, 1.24, 0.08, 0.1, 0.2, 0.1, 0xe89040, null, 0.15);
-      addEar(g, 0.2, 1.24, 0.08, 0.1, 0.2, 0.1, 0xe89040, null, -0.15);
-      addFace(g, 0x222222, {ey:0.96, ez:0.42, ex:0.13, s:0.09, white:true, smile:true, mouthY:0.8});
-      const flame = part(g,'cone',0xf05030, 0, 0.72, -0.42, {sx:0.13, sy:0.36, sz:0.13});
-      const flameIn = part(g,'cone',0xffd75e, 0, 0.8, -0.42, {sx:0.08, sy:0.24, sz:0.08});
-      flame.add(flameIn); flameIn.position.set(0, 0.05, 0); // 内焰随外焰一起摇曳
-      const flameCore = part(g,'sphere',0xfff2c8, 0, 0.56, -0.42, {sx:0.09, sy:0.09, sz:0.09}); // 尾端火种
-      part(g,'sphere',0xe89040, 0, 0.5, -0.36, {sx:0.11, sy:0.11, sz:0.11});
-      part(g,'cyl',0xe89040, -0.18, 0.1, 0, {sx:0.4, sy:0.3, sz:0.4});
-      part(g,'cyl',0xe89040, 0.18, 0.1, 0, {sx:0.4, sy:0.3, sz:0.4});
-      g.userData.flame = flame; g.userData.body = body; g.userData.head = head;
-      break;
-    }
-    case 'snorlax': {
-      const body = part(g,'sphere',0x4a7a6a, 0, 0.8, 0, {sx:0.72, sy:0.72, sz:0.72});
-      part(g,'sphere',0xf2e0c0, 0, 0.72, 0.44, {sx:0.5, sy:0.5, sz:0.3});   // 大肚皮
-      part(g,'sphere',0xf2e0c0, 0, 1.06, 0.52, {sx:0.36, sy:0.28, sz:0.18}); // 米色脸面
-      part(g,'sphere',0x4a7a6a, -0.5, 1.24, 0, {sx:0.18, sy:0.18, sz:0.18}); // 耳朵
-      part(g,'sphere',0x4a7a6a, 0.5, 1.24, 0, {sx:0.18, sy:0.18, sz:0.18});
-      part(g,'cone',0x3a5a4a, -0.5, 1.38, 0, {sx:0.09, sy:0.12, sz:0.09});   // 耳内
-      part(g,'cone',0x3a5a4a, 0.5, 1.38, 0, {sx:0.09, sy:0.12, sz:0.09});
-      // 睡颜：眯眼 + 嘴缝 + 两颗小獠牙
-      part(g,'box',0x3a5a4a, -0.15, 1.1, 0.62, {sx:0.1, sy:0.024, sz:0.02, rz:0.28});
-      part(g,'box',0x3a5a4a, 0.15, 1.1, 0.62, {sx:0.1, sy:0.024, sz:0.02, rz:-0.28});
-      part(g,'box',0x3a5a4a, 0, 0.92, 0.66, {sx:0.15, sy:0.026, sz:0.02});
-      part(g,'box',0xffffff, -0.08, 0.89, 0.66, {sx:0.03, sy:0.05, sz:0.02});
-      part(g,'box',0xffffff, 0.08, 0.89, 0.66, {sx:0.03, sy:0.05, sz:0.02});
-      part(g,'sphere',0x4a7a6a, -0.66, 0.62, 0.18, {sx:0.2, sy:0.26, sz:0.22}); // 垂臂
-      part(g,'sphere',0x4a7a6a, 0.66, 0.62, 0.18, {sx:0.2, sy:0.26, sz:0.22});
-      part(g,'sphere',0xf2e0c0, -0.68, 0.5, 0.3, {sx:0.12, sy:0.1, sz:0.12});   // 手掌
-      part(g,'sphere',0xf2e0c0, 0.68, 0.5, 0.3, {sx:0.12, sy:0.1, sz:0.12});
-      part(g,'cyl',0xf2e0c0, -0.34, 0.12, 0.42, {sx:0.28, sy:0.18, sz:0.3});    // 米色脚底
-      part(g,'cyl',0xf2e0c0, 0.34, 0.12, 0.42, {sx:0.28, sy:0.18, sz:0.3});
-      g.userData.body = body;
-      break;
-    }
-    case 'pidgey': {
-      const body = part(g,'sphere',0xc8a068, 0, 0.42, 0, {sx:0.44, sy:0.42, sz:0.46});
-      part(g,'sphere',0xf2e4c8, 0, 0.38, 0.26, {sx:0.3, sy:0.26, sz:0.18}); // 奶油胸腹
-      const head = part(g,'sphere',0xc8a068, 0, 0.86, 0.1, {sx:0.36, sy:0.34, sz:0.36});
-      part(g,'cone',0xb08a50, -0.1, 1.12, 0.12, {sx:0.16, sy:0.18, sz:0.1, rz:0.4}); // 冠羽
-      part(g,'cone',0xf2e4c8, 0.06, 1.1, 0.08, {sx:0.1, sy:0.14, sz:0.08, rz:-0.35});
-      part(g,'cone',0x38302a, 0, 0.84, 0.42, {sx:0.08, sy:0.13, sz:0.08, rx:Math.PI/2}); // 上喙
-      part(g,'cone',0x584840, 0, 0.8, 0.38, {sx:0.06, sy:0.08, sz:0.06, rx:Math.PI/2});  // 下喙
-      addFace(g, 0x222222, {ey:0.92, ez:0.34, ex:0.13, s:0.075, white:true});
-      const wingL = part(g,'sphere',0xb08a50, -0.38, 0.48, 0, {sx:0.16, sy:0.22, sz:0.3});
-      const fL1 = part(g,'box',0xa87c44, -0.38, 0.48, 0, {sx:0.12, sy:0.14, sz:0.24});
-      wingL.add(fL1); fL1.position.set(0, -0.08, -0.08); fL1.rotation.x = -0.3;
-      const fL2 = part(g,'box',0x98703a, -0.38, 0.48, 0, {sx:0.09, sy:0.1, sz:0.18});
-      wingL.add(fL2); fL2.position.set(0, -0.14, -0.02); fL2.rotation.x = -0.5;
-      const wingR = part(g,'sphere',0xb08a50, 0.38, 0.48, 0, {sx:0.16, sy:0.22, sz:0.3});
-      const fR1 = part(g,'box',0xa87c44, 0.38, 0.48, 0, {sx:0.12, sy:0.14, sz:0.24});
-      wingR.add(fR1); fR1.position.set(0, -0.08, -0.08); fR1.rotation.x = -0.3;
-      const fR2 = part(g,'box',0x98703a, 0.38, 0.48, 0, {sx:0.09, sy:0.1, sz:0.18});
-      wingR.add(fR2); fR2.position.set(0, -0.14, -0.02); fR2.rotation.x = -0.5;
-      const tail = part(g,'cone',0xb08a50, 0, 0.45, -0.4, {sx:0.16, sy:0.26, sz:0.08, rx:-1.9});
-      part(g,'box',0xa87c44, -0.07, 0.42, -0.44, {sx:0.06, sy:0.02, sz:0.2, rx:-0.35});
-      part(g,'box',0xa87c44, 0.07, 0.42, -0.44, {sx:0.06, sy:0.02, sz:0.2, rx:-0.35});
-      part(g,'cyl',0xe8a030, -0.14, 0.08, 0.04, {sx:0.24, sy:0.16, sz:0.24});
-      part(g,'cyl',0xe8a030, 0.14, 0.08, 0.04, {sx:0.24, sy:0.16, sz:0.24});
-      g.userData.wingL = wingL; g.userData.wingR = wingR; g.userData.tail = tail; g.userData.body = body; g.userData.head = head;
-      break;
-    }
-    case 'magnemite': {
-      const body = part(g,'sphere',0xb8bec8, 0, 0.62, 0, {sx:0.42, sy:0.42, sz:0.42});
-      // 独眼：眼白 + 蓝虹膜 + 黑瞳
-      part(g,'sphere',0xffffff, 0, 0.64, 0.36, {sx:0.17, sy:0.17, sz:0.12});
-      part(g,'sphere',0x3a5ac8, 0, 0.64, 0.43, {sx:0.09, sy:0.09, sz:0.05});
-      part(g,'sphere',0x1a1a1a, 0, 0.64, 0.46, {sx:0.045, sy:0.045, sz:0.03});
-      part(g,'sphere',0xffffff, -0.03, 0.68, 0.47, {sx:0.02, sy:0.02, sz:0.015}); // 高光
-      const screwT = part(g,'cyl',0x8a9098, 0, 0.98, 0, {sx:0.3, sy:0.24, sz:0.3});
-      const ph1 = part(g,'box',0x6a7078, 0, 0.98, 0, {sx:0.02, sy:0.02, sz:0.2}); // 顶螺丝十字槽（随旋转）
-      screwT.add(ph1); ph1.position.set(0, 0.13, 0);
-      const ph2 = part(g,'box',0x6a7078, 0, 0.98, 0, {sx:0.2, sy:0.02, sz:0.02});
-      screwT.add(ph2); ph2.position.set(0, 0.13, 0);
-      const screwL = part(g,'cyl',0x8a9098, -0.46, 0.66, 0, {sx:0.26, sy:0.18, sz:0.26, rz:Math.PI/2});
-      const screwR = part(g,'cyl',0x8a9098, 0.46, 0.66, 0, {sx:0.26, sy:0.18, sz:0.26, rz:Math.PI/2});
-      const magL = part(g,'box',0xd84a3a, -0.58, 0.5, 0, {sx:0.12, sy:0.2, sz:0.14});
-      part(g,'sphere',0xf0f0f0, -0.58, 0.4, 0, {sx:0.06, sy:0.05, sz:0.09}); // 磁极白端
-      const magR = part(g,'box',0x4a6ad8, 0.58, 0.5, 0, {sx:0.12, sy:0.2, sz:0.14});
-      part(g,'sphere',0xf0f0f0, 0.58, 0.4, 0, {sx:0.06, sy:0.05, sz:0.09});
-      part(g,'ico',0x9aa0a8, 0.3, 0.5, 0.3, {sx:0.05, sy:0.05, sz:0.05}); // 侧身螺栓
-      part(g,'ico',0x9aa0a8, -0.3, 0.5, 0.3, {sx:0.05, sy:0.05, sz:0.05});
-      g.userData.body = body; g.userData.screwT = screwT; g.userData.screwL = screwL; g.userData.magL = magL; g.userData.magR = magR;
-      break;
-    }
-    case 'oddish': {
-      const body = part(g,'sphere',0x5878d8, 0, 0.4, 0, {sx:0.44, sy:0.42, sz:0.44});
-      addFace(g, 0xd03030, {ey:0.46, ez:0.4, ex:0.14, s:0.085, white:true}); // 红眼睛
-      part(g,'sphere',0x3a2a5a, 0, 0.34, 0.41, {sx:0.07, sy:0.045, sz:0.04}); // 小嘴
-      part(g,'sphere',0x3f8a4e, 0, 0.68, -0.05, {sx:0.16, sy:0.14, sz:0.16});
-      const leaf1 = part(g,'cone',0x4aa85c, -0.16, 0.84, -0.02, {sx:0.14, sy:0.3, sz:0.06, rz:0.9});
-      const leaf2 = part(g,'cone',0x4aa85c, 0.16, 0.84, -0.02, {sx:0.14, sy:0.3, sz:0.06, rz:-0.9});
-      const leaf3 = part(g,'cone',0x4aa85c, 0, 0.92, -0.18, {sx:0.14, sy:0.28, sz:0.06, rx:-0.5});
-      part(g,'cone',0x4aa85c, 0, 0.9, 0.12, {sx:0.12, sy:0.24, sz:0.06, rx:0.45}); // 前侧第四叶
-      part(g,'cyl',0x3a68c8, -0.15, 0.06, 0.04, {sx:0.3, sy:0.12, sz:0.3});
-      part(g,'cyl',0x3a68c8, 0.15, 0.06, 0.04, {sx:0.3, sy:0.12, sz:0.3});
-      g.userData.leaf1 = leaf1; g.userData.leaf2 = leaf2; g.userData.leaf3 = leaf3; g.userData.body = body;
-      break;
-    }
-    case 'psyduck': {
-      const body = part(g,'sphere',0xf2e0b0, 0, 0.42, 0, {sx:0.44, sy:0.5, sz:0.44});
-      const head = part(g,'sphere',0xf2e0b0, 0, 0.92, 0.06, {sx:0.4, sy:0.38, sz:0.38});
-      const bill = part(g,'sphere',0xe89838, 0, 0.88, 0.4, {sx:0.3, sy:0.16, sz:0.2}); // 宽扁嘴
-      part(g,'sphere',0xd07828, -0.08, 0.94, 0.5, {sx:0.03, sy:0.03, sz:0.03}); // 鼻孔
-      part(g,'sphere',0xd07828, 0.08, 0.94, 0.5, {sx:0.03, sy:0.03, sz:0.03});
-      // 三根呆毛
-      part(g,'cyl',0xd8b86a, -0.07, 1.36, 0.02, {sx:0.018, sy:0.18, sz:0.018, rx:-0.25, rz:0.15});
-      part(g,'cyl',0xd8b86a, 0, 1.38, 0.02, {sx:0.018, sy:0.2, sz:0.018, rx:-0.2});
-      part(g,'cyl',0xd8b86a, 0.07, 1.36, 0.02, {sx:0.018, sy:0.18, sz:0.018, rx:-0.25, rz:-0.15});
-      addFace(g, 0x222222, {ey:1.0, ez:0.34, ex:0.15, s:0.07, white:true});
-      // 扶着脑袋的双手（可达鸭的招牌姿势）
-      part(g,'sphere',0xf2e0b0, -0.34, 0.98, 0.16, {sx:0.14, sy:0.2, sz:0.14});
-      part(g,'sphere',0xf2e0b0, 0.34, 0.98, 0.16, {sx:0.14, sy:0.2, sz:0.14});
-      part(g,'cyl',0xe8b060, -0.16, 0.1, 0.02, {sx:0.4, sy:0.3, sz:0.4});
-      part(g,'cyl',0xe8b060, 0.16, 0.1, 0.02, {sx:0.4, sy:0.3, sz:0.4});
-      part(g,'sphere',0xf2e0b0, 0, 0.38, -0.42, {sx:0.09, sy:0.12, sz:0.09}); // 尾部小绒球
-      g.userData.bill = bill; g.userData.body = body; g.userData.head = head;
-      break;
-    }
-    case 'meowth': {
-      const body = part(g,'sphere',0xf2e0c0, 0, 0.42, 0, {sx:0.44, sy:0.5, sz:0.44});
-      const head = part(g,'sphere',0xf2e0c0, 0, 0.9, 0.08, {sx:0.38, sy:0.38, sz:0.38});
-      addEar(g, -0.22, 1.26, 0.06, 0.14, 0.24, 0.14, 0xf2e0c0, 0xe8a8a0, 0.15);
-      addEar(g, 0.22, 1.26, 0.06, 0.14, 0.24, 0.14, 0xf2e0c0, 0xe8a8a0, -0.15);
-      part(g,'cone',0x8a5a30, -0.22, 1.42, 0.06, {sx:0.09, sy:0.1, sz:0.09, rz:0.15}); // 耳尖
-      part(g,'cone',0x8a5a30, 0.22, 1.42, 0.06, {sx:0.09, sy:0.1, sz:0.09, rz:-0.15});
-      const coin = part(g,'disc',0xe8c020, 0, 1.08, 0.4, {sx:1.1, sy:1.1, sz:1});
-      coin.rotation.x = Math.PI/2;
-      const coinIn = part(g,'disc',0xc89818, 0, 1.08, 0.41, {sx:0.7, sy:0.7, sz:1});
-      coinIn.rotation.x = Math.PI/2;
-      addFace(g, 0x222222, {ey:0.96, ez:0.4, ex:0.14, s:0.085, white:true, smile:true, mouthY:0.82, nose:0xc89078, noseY:0.9});
-      // 胡须（两侧各两根）
-      part(g,'box',0xd8c8a8, -0.37, 0.94, 0.34, {sx:0.17, sy:0.014, sz:0.014, rz:0.1});
-      part(g,'box',0xd8c8a8, -0.37, 0.88, 0.34, {sx:0.17, sy:0.014, sz:0.014, rz:-0.1});
-      part(g,'box',0xd8c8a8, 0.37, 0.94, 0.34, {sx:0.17, sy:0.014, sz:0.014, rz:-0.1});
-      part(g,'box',0xd8c8a8, 0.37, 0.88, 0.34, {sx:0.17, sy:0.014, sz:0.014, rz:0.1});
-      const tail = part(g,'torus',0xf2e0c0, -0.4, 0.6, -0.3, {sx:0.8, sy:0.8, sz:0.8});
-      part(g,'sphere',0x8a5a30, -0.52, 0.6, -0.42, {sx:0.1, sy:0.1, sz:0.1});
-      part(g,'cyl',0x8a5a30, -0.2, 0.12, 0, {sx:0.4, sy:0.3, sz:0.4});
-      part(g,'cyl',0x8a5a30, 0.2, 0.12, 0, {sx:0.4, sy:0.3, sz:0.4});
-      g.userData.coin = coin; g.userData.tail = tail; g.userData.body = body;
-      break;
-    }
-  }
+  g.userData.dir = 'front';
+  g.userData.frame = 0;
+  const h = POKEMON_H[id] || 1.0;
+  const spr = new THREE.Sprite(new THREE.SpriteMaterial({map: pixelTexture(id, 'front', 0), transparent:true}));
+  spr.center.set(0.5, 0); // 以脚底为锚点贴地
+  spr.scale.set(h, h, 1);
+  g.add(spr);
+  g.userData.sprite = spr;
   addShadow(g, id);
   return g;
 }
@@ -2379,90 +2356,352 @@ function setPlayerForm3D(form){
   playerGroup.add(playerMesh);
 }
 
-/* ---- 待机动画 ---- */
+/* ---- 像素精灵动画：朝向 + 走路双帧（移动中自动切换，静止回第 0 帧） ---- */
 function animateModel(g, t){
-  const id = g.userData.id || g.userData.form || 'x';
-  const u = g.userData;
-  if (id==='scyther'){
-    if (u.wingL) u.wingL.rotation.z = Math.sin(t*28)*0.4;
-    if (u.wingR) u.wingR.rotation.z = -Math.sin(t*28)*0.4;
-  } else if (id==='squirtle' || id==='pikachu' || id==='eevee' || id==='meowth'){
-    if (u.tail) u.tail.rotation.y = Math.sin(t*6)*0.5;
-  } else if (id==='charmander'){
-    if (u.flame) u.flame.scale.y = 1 + Math.sin(t*10)*0.25;
-  } else if (id==='snorlax'){
-    if (u.body) u.body.scale.y = 0.72 + Math.sin(t*1.6)*0.02;
-  } else if (id==='diglett'){
-    if (u.head) u.head.position.y = 0.55 + Math.sin(t*3)*0.04;
-  } else if (id==='psyduck'){
-    if (u.head) u.head.rotation.z = Math.sin(t*1.4)*0.1;
-    if (u.bill) u.bill.scale.y = 0.16 + Math.sin(t*2.2)*0.015;
-  } else if (id==='pidgey'){
-    if (u.wingL) u.wingL.rotation.z = Math.sin(t*9)*0.5;
-    if (u.wingR) u.wingR.rotation.z = -Math.sin(t*9)*0.5;
-    if (u.tail) u.tail.rotation.x = -1.9 + Math.sin(t*3)*0.15;
-  } else if (id==='magnemite'){
-    if (u.body) u.body.position.y = 0.62 + Math.sin(t*2.2)*0.06; // 悬浮
-    if (u.screwT) u.screwT.rotation.y = t*2.5;
-    if (u.screwL) u.screwL.rotation.x = t*2;
-    if (u.magL) u.magL.position.y = 0.5 + Math.sin(t*4)*0.03;
-    if (u.magR) u.magR.position.y = 0.5 - Math.sin(t*4)*0.03;
-  } else if (id==='oddish'){
-    if (u.leaf1) u.leaf1.rotation.z = 0.9 + Math.sin(t*2.4)*0.18; // 叶片摇摆
-    if (u.leaf2) u.leaf2.rotation.z = -0.9 - Math.sin(t*2.4+1)*0.18;
-    if (u.leaf3) u.leaf3.rotation.x = -0.5 + Math.sin(t*1.8)*0.15;
-  }
-  g.position.y = Math.sin(t*2.5 + (hash2(id.length, id.charCodeAt(0))%10))*0.02;
+  // 兼容保留：t 参数用于帧节拍；朝向由移动向量另行驱动
+  const moving = g.userData.moving;
+  setSpriteFrame(g, moving ? Math.floor(t*6)%2 : 0);
 }
 
+/* =====================================================================
+   2D 全像素渲染器（场景与人物皆为像素；旧 3D 渲染保留为后备路径）
+   ===================================================================== */
+const USE_PIXEL_2D = true;
+const PX_SCALE = 2, TILE = 16, S = TILE*PX_SCALE; // 16px 美术 ×2 → 每格 32 屏幕像素
+const VIEW_TW = Math.round(VIEW_W/S), VIEW_TH = Math.round(VIEW_H/S); // 可视格数 30×20
+let px2 = null;
+function cssColor(hex){ return '#'+hex.toString(16).padStart(6,'0'); }
+function initRender2D(){
+  px2 = canvas.getContext('2d');
+  px2.imageSmoothingEnabled = false;
+}
+function camLeftX(){ return inHouse ? (INT_W-VIEW_TW)/2 : camTarget.x + MAP_W/2 - VIEW_TW/2; }
+function camTopY(){ return inHouse ? (INT_H-VIEW_TH)/2 : camTarget.z + MAP_H/2 - VIEW_TH/2; }
+/* 2D 相机跟随：死区 + 边界夹取（与 3D 版同参数） */
+function updateCamera2D(dt){
+  if (!game) return;
+  if (inHouse){ camTarget.x = 0; camTarget.z = 0; return; }
+  const dx = player.x - camTarget.x, dz = player.y - camTarget.z;
+  let tx = camTarget.x, tz = camTarget.z;
+  if (Math.abs(dx) > DEAD_X) tx = player.x - Math.sign(dx)*DEAD_X;
+  if (Math.abs(dz) > DEAD_Z) tz = player.y - Math.sign(dz)*DEAD_Z;
+  const k = Math.min(1, dt*8);
+  camTarget.x += (tx - camTarget.x)*k;
+  camTarget.z += (tz - camTarget.z)*k;
+  camTarget.x = clamp(camTarget.x, -CLAMP_X, CLAMP_X);
+  camTarget.z = clamp(camTarget.z, -CLAMP_Z, CLAMP_Z);
+}
+/* 像素椭圆（按行填充，保证像素感） */
+function pxBlob(cx, cy, rx, ry){
+  for (let dy=-ry; dy<=ry; dy++){
+    const w = Math.floor(rx*Math.sqrt(Math.max(0, 1-(dy/ry)*(dy/ry))));
+    if (w<=0) continue;
+    px2.fillRect(cx-w, cy+dy, w*2+1, 1);
+  }
+}
+/* ---- 地面 ---- */
+function drawTile2D(x, y, t){
+  const i = idx(x,y);
+  const bx = Math.round((x-camLeftX())*S), by = Math.round((y-camTopY())*S);
+  px2.fillStyle = shadeColor(groundTileBase(x,y), game.shade[i]);
+  px2.fillRect(bx, by, S, S);
+  const h = hash2(x,y);
+  if (t===T_GRASS){
+    px2.fillStyle = 'rgba(0,0,0,0.07)';
+    px2.fillRect(bx+(h%13)+1, by+((h>>4)%13)+1, 2, 2);
+    px2.fillRect(bx+((h>>8)%12)+2, by+((h>>12)%12)+2, 2, 2);
+  } else if (t===T_WATER){
+    const ph = Math.floor(t*2 + x*1.3 + y*0.7) % 4;
+    px2.fillStyle = 'rgba(255,255,255,0.15)';
+    px2.fillRect(bx+2+ph*2, by+4, 5, 1);
+    px2.fillRect(bx+11-ph*2, by+10, 4, 1);
+  } else if (t===T_TILLED){
+    px2.fillStyle = 'rgba(0,0,0,0.16)';
+    for (let r=3;r<S;r+=5) px2.fillRect(bx+1, by+r, S-2, 1);
+    if (game.watered[i]){ px2.fillStyle = 'rgba(30,16,50,0.28)'; px2.fillRect(bx, by, S, S); }
+  } else if (t===T_PATH){
+    px2.fillStyle = 'rgba(0,0,0,0.08)';
+    px2.fillRect(bx+((h>>2)%10)+2, by+((h>>6)%10)+2, 3, 2);
+  }
+}
+/* ---- 装饰 ---- */
+function drawTree2D(tx, ty, stump){
+  const cx = Math.round((tx+0.5-camLeftX())*S), gy = Math.round((ty+1-camTopY())*S);
+  if (stump){
+    px2.fillStyle = '#6b4a2b'; px2.fillRect(cx-5, gy-10, 10, 10);
+    px2.fillStyle = '#8a6236'; px2.fillRect(cx-7, gy-11, 14, 3);
+    return;
+  }
+  px2.fillStyle = '#6b4a2b'; px2.fillRect(cx-3, gy-16, 6, 16);
+  px2.fillStyle = '#594022'; px2.fillRect(cx+1, gy-16, 2, 16);
+  const leaves = TREE_LEAVES[game.season] || TREE_LEAVES.spring;
+  px2.fillStyle = cssColor(leaves[0]); pxBlob(cx, gy-24, 15, 11);
+  px2.fillStyle = cssColor(leaves[1]); pxBlob(cx-6+((tx*7)%5), gy-31, 10, 8);
+  px2.fillStyle = cssColor(leaves[2]); pxBlob(cx+7, gy-28, 9, 7);
+  px2.fillStyle = 'rgba(255,255,255,0.13)'; pxBlob(cx-5, gy-33, 4, 3);
+  if (game.season==='winter'){ px2.fillStyle = '#eef4f8'; pxBlob(cx, gy-27, 14, 5); }
+}
+function drawRock2D(tx, ty){
+  const cx = Math.round((tx+0.5-camLeftX())*S), gy = Math.round((ty+1-camTopY())*S);
+  px2.fillStyle = '#7d8188'; pxBlob(cx, gy-6, 8, 6);
+  px2.fillStyle = '#94989f'; pxBlob(cx-3, gy-9, 4, 3);
+  px2.fillStyle = 'rgba(255,255,255,0.16)'; px2.fillRect(cx-4, gy-11, 3, 2);
+}
+function drawTallGrass2D(tx, ty){
+  const cx = Math.round((tx+0.5-camLeftX())*S), gy = Math.round((ty+1-camTopY())*S);
+  const h = hash2(tx,ty);
+  px2.fillStyle = '#5a9a48';
+  for (let k=0;k<3;k++){
+    const ox = (k-1)*5 + (h%3);
+    const hh = 7 + ((h>>k)%3);
+    for (let r=0;r<hh;r++) px2.fillRect(cx+ox+(r>hh/2?1:0), gy-r, 2, 1);
+  }
+}
+function drawFlower2D(tx, ty){
+  const cx = Math.round((tx+0.5-camLeftX())*S), gy = Math.round((ty+1-camTopY())*S);
+  const h = hash2(tx,ty);
+  const cols = ['#e86a8a', '#f2c84a', '#ffffff', '#c87ae8'];
+  const c = cols[h%cols.length];
+  px2.fillStyle = '#4e8a3c'; px2.fillRect(cx, gy-8, 2, 8);
+  px2.fillStyle = c;
+  px2.fillRect(cx-3, gy-11, 3, 3); px2.fillRect(cx+2, gy-11, 3, 3);
+  px2.fillRect(cx-3, gy-6, 3, 3);  px2.fillRect(cx+2, gy-6, 3, 3);
+  px2.fillStyle = '#f2d050'; px2.fillRect(cx, gy-9, 2, 2);
+}
+function drawCrop2D(tx, ty, crop){
+  const cx = Math.round((tx+0.5-camLeftX())*S), gy = Math.round((ty+1-camTopY())*S);
+  const c = CROPS[crop.type];
+  const prog = crop.rem<=0 ? 1 : 1 - crop.rem/c.days;
+  const stage = crop.rem<=0 ? 3 : (prog<0.3?0 : prog<0.6?1 : 2);
+  px2.fillStyle = '#3f8a26';
+  if (stage===0){
+    px2.fillRect(cx-1, gy-6, 2, 6);
+    px2.fillStyle = '#6cbf3f'; px2.fillRect(cx-4, gy-7, 3, 2); px2.fillRect(cx+2, gy-7, 3, 2);
+  } else {
+    const r = [0,6,8,9][stage];
+    px2.fillStyle = '#3f8a26'; pxBlob(cx, gy-r-2, r+2, r);
+    px2.fillStyle = '#5fae36'; pxBlob(cx-2, gy-r-4, r-2, r-3);
+    if (stage===3){
+      px2.fillStyle = cssColor(c.berry);
+      px2.fillRect(cx-4, gy-10, 4, 4); px2.fillRect(cx+2, gy-8, 3, 3); px2.fillRect(cx-1, gy-5, 3, 3);
+    }
+  }
+}
+/* ---- 建筑 ---- */
+function drawHouse2D(){
+  const x0 = Math.round((HOUSE.x-camLeftX())*S), y0 = Math.round((HOUSE.y-camTopY())*S);
+  const W = HOUSE.w*S, H = HOUSE.h*S, roofH = Math.round(H*0.42);
+  px2.fillStyle = '#e8d9b8'; px2.fillRect(x0, y0+roofH, W, H-roofH);       // 墙
+  px2.fillStyle = '#d8c8a4';
+  for (let vx=6; vx<W; vx+=22) px2.fillRect(x0+vx, y0+roofH, 2, H-roofH);  // 木梁
+  for (let r=0;r<roofH;r+=2){                                              // 双坡屋顶
+    const inset = Math.max(0, Math.round((roofH-r)*0.45));
+    px2.fillStyle = (r>>1)%2 ? '#9a4430' : '#a04830';
+    px2.fillRect(x0+inset-4, y0+r, W-inset*2+8, 2);
+  }
+  px2.fillStyle = '#6a3226'; px2.fillRect(x0-4, y0+roofH-2, W+8, 3);       // 檐口
+  const dx = x0 + (HOUSE.doorX-HOUSE.x)*S + 4;
+  px2.fillStyle = '#6a4a2c'; px2.fillRect(dx, y0+H-26, 18, 26);            // 门
+  px2.fillStyle = '#7a5230'; px2.fillRect(dx+2, y0+H-24, 14, 24);
+  px2.fillStyle = '#e8c020'; px2.fillRect(dx+12, y0+H-14, 3, 3);           // 门把
+  for (const wx of [x0+12, x0+W-30]){                                      // 窗
+    px2.fillStyle = '#fff6dc'; px2.fillRect(wx, y0+roofH+10, 20, 16);
+    px2.fillStyle = '#6a4a2c'; px2.fillRect(wx+9, y0+roofH+10, 2, 16); px2.fillRect(wx, y0+roofH+17, 20, 2);
+  }
+  px2.fillStyle = '#8a5a48'; px2.fillRect(x0+W-26, y0+4, 12, 18);          // 烟囱
+  px2.fillStyle = '#5a3a30'; px2.fillRect(x0+W-28, y0+2, 16, 4);
+}
+function drawShop2D(){
+  const x0 = Math.round((SHOP.x-camLeftX())*S), y0 = Math.round((SHOP.y-camTopY())*S);
+  const W = SHOP.w*S, H = SHOP.h*S;
+  px2.fillStyle = '#7a5a34'; px2.fillRect(x0+6, y0+H-30, W-12, 30);        // 摊台
+  px2.fillStyle = '#9c7a48'; px2.fillRect(x0+3, y0+H-34, W-6, 6);          // 台面
+  for (let k=0;k<6;k++){                                                   // 红白棚
+    px2.fillStyle = k%2 ? '#f2e8d8' : '#c0392b';
+    px2.fillRect(x0-6+k*((W+12)/6), y0-14, (W+12)/6, 16);
+  }
+  px2.fillStyle = 'rgba(0,0,0,0.18)'; px2.fillRect(x0-6, y0+2, W+12, 3);
+  px2.fillStyle = '#5a422a'; px2.fillRect(x0-4, y0-6, 4, H-8); px2.fillRect(x0+W, y0-6, 4, H-8); // 柱
+  px2.fillStyle = '#8a6a20'; pxBlob(x0+W/2, y0-24, 9, 9);                  // 金币招牌
+  px2.fillStyle = '#e8c020'; pxBlob(x0+W/2, y0-24, 7, 7);
+  px2.fillStyle = '#c89818'; px2.fillRect(x0+W/2-1, y0-28, 2, 8);
+}
+/* ---- 实体（像素精灵） ---- */
+function drawEntity2D(id, dirName, moving, wx, wy, t, big){
+  const sx = Math.round((wx-camLeftX())*S), sy = Math.round((wy+0.5-camTopY())*S);
+  // 脚底阴影
+  px2.fillStyle = 'rgba(20,16,12,0.28)'; pxBlob(sx, sy-2, big?11:9, 3);
+  const frame = moving ? Math.floor(t*7)%2 : 0;
+  const breathe = (!moving && Math.floor(t*1.6)%2===1) ? 2 : 0; // 待机呼吸（整体起伏 1 美术像素）
+  px2.drawImage(pxCanvas(id, dirName, frame), sx-16, sy-34-breathe, 32, 32);
+}
+/* ---- 主渲染 ---- */
+function render2D(t){
+  if (!px2 || !game) return;
+  px2.fillStyle = '#101c14';
+  px2.fillRect(0, 0, VIEW_W, VIEW_H);
+  if (inHouse){ renderInterior2D(t); return; }
+  const x0 = Math.max(0, Math.floor(camLeftX())), x1 = Math.min(MAP_W-1, Math.ceil(camLeftX()+VIEW_TW));
+  const y0 = Math.max(0, Math.floor(camTopY())), y1 = Math.min(MAP_H-1, Math.ceil(camTopY()+VIEW_TH));
+  for (let y=y0;y<=y1;y++) for (let x=x0;x<=x1;x++) drawTile2D(x, y, game.tile[idx(x,y)]);
+  // 贴地装饰（高草/花，绘制在角色之下）
+  for (let y=y0;y<=y1;y++) for (let x=x0;x<=x1;x++){
+    const d = game.deco[idx(x,y)];
+    if (d===D_TALL) drawTallGrass2D(x,y);
+    else if (d===D_FLOWER) drawFlower2D(x,y);
+  }
+  // 作物
+  for (let y=y0;y<=y1;y++) for (let x=x0;x<=x1;x++){
+    const c = game.crops[idx(x,y)];
+    if (c) drawCrop2D(x, y, c);
+  }
+  // 需要 Y 排序的物体（树/石/建筑/精灵）
+  const items = [];
+  for (let y=y0;y<=Math.min(MAP_H-1,y1+2);y++) for (let x=x0;x<=x1;x++){
+    const d = game.deco[idx(x,y)];
+    if (d===D_TREE) items.push({y:y+1, f:()=>drawTree2D(x,y,false)});
+    else if (d===D_STUMP) items.push({y:y+1, f:()=>drawTree2D(x,y,true)});
+    else if (d===D_ROCK) items.push({y:y+1, f:()=>drawRock2D(x,y)});
+  }
+  items.push({y:HOUSE.y+HOUSE.h, f:drawHouse2D});
+  items.push({y:SHOP.y+SHOP.h, f:drawShop2D});
+  items.push({y:SHOP.y+1.9, f:()=>drawEntity2D('meowth','front',false,SHOP.x+1.8,SHOP.y+1.9,t)});
+  for (const nm of npcMeshes){
+    const n = nm.npc;
+    let dir = nm.dir || 'front', moving = false;
+    if (n.id==='snorlax') dir = 'front';
+    else if (n.target){ moving = true; dir = facingToDir(Math.atan2(n.target[0]+0.5-n.x, n.target[1]+0.5-n.y)); nm.dir = dir; }
+    items.push({y:n.y, f:()=>drawEntity2D(n.id, dir, moving, n.x, n.y, t, n.id==='snorlax')});
+  }
+  for (const wm of wildMeshes){
+    const w = wm.wild;
+    let dir = wm.dir || 'front', moving = false;
+    if (w.target){ moving = true; dir = facingToDir(Math.atan2(w.target[0]+0.5-w.x, w.target[1]+0.5-w.y)); wm.dir = dir; }
+    items.push({y:w.y, f:()=>drawEntity2D(w.id, dir, moving, w.x, w.y, t)});
+  }
+  items.push({y:player.y, f:()=>drawEntity2D(player.form||'ditto', ['back','front','left','right'][player.dir], player.moving, player.x, player.y, t)});
+  items.sort((a,b)=>a.y-b.y);
+  for (const it of items) it.f();
+  // 目标格高亮
+  if (!menuOpen && !dialog && !fishing){
+    const [hx,hy] = facingTile();
+    if (hx>=0 && hy>=0 && hx<MAP_W && hy<MAP_H){
+      px2.strokeStyle = 'rgba(255,215,94,'+(0.55+0.25*Math.sin(t*4)).toFixed(2)+')';
+      px2.lineWidth = 2;
+      px2.strokeRect(Math.round((hx-camLeftX())*S)+1, Math.round((hy-camTopY())*S)+1, S-2, S-2);
+    }
+  }
+  // 钓鱼浮漂 / 咬钩提示
+  if (fishing){
+    const bx = Math.round((fishing.tx+0.5-camLeftX())*S), by = Math.round((fishing.ty+0.5-camTopY())*S);
+    px2.fillStyle = '#e04030'; px2.fillRect(bx-3, by-6, 6, 5);
+    px2.fillStyle = '#f5f0e0'; px2.fillRect(bx-3, by-2, 6, 3);
+    if (fishing.phase==='bite'){
+      const bob = Math.abs(Math.sin(t*10))*4;
+      px2.fillStyle = '#ffd75e';
+      px2.fillRect(bx-2, by-30-bob, 4, 10); px2.fillRect(bx-2, by-18-bob, 4, 4);
+    }
+  }
+  // 氛围粒子：白天花瓣 / 秋落叶 / 夜晚萤火虫
+  if (!inHouse){
+    const isNight = game.time>=1200 || game.time<330;
+    if (isNight){
+      px2.fillStyle = 'rgba(255,233,122,0.85)';
+      for (let k=0;k<12;k++){
+        const sd = hash2(k*13, 7)%1000/1000;
+        const fx2 = camLeftX() + (hash2(k,3)%100)/100*VIEW_TW + Math.sin(t*0.6+sd*9)*1.6;
+        const fy2 = camTopY() + (hash2(k,5)%100)/100*VIEW_TH + Math.sin(t*1.1+sd*7)*0.8;
+        if (Math.floor(t*3+k)%3===0) continue;
+        px2.fillRect(Math.round((fx2-camLeftX())*S), Math.round((fy2-camTopY())*S), 3, 3);
+      }
+    } else if (game.season==='spring' || game.season==='fall'){
+      const col = game.season==='fall' ? 'rgba(208,132,56,0.9)' : 'rgba(242,174,198,0.9)';
+      px2.fillStyle = col;
+      for (let k=0;k<10;k++){
+        const sd = (hash2(k*31, 11)%1000)/1000;
+        const fall = ((t*0.06 + sd) % 1 + 1) % 1;
+        const fx2 = camLeftX() + (hash2(k,3)%100)/100*VIEW_TW + Math.sin(t*0.9+sd*9)*1.2;
+        const fy2 = camTopY() + fall*VIEW_TH;
+        px2.fillRect(Math.round((fx2-camLeftX())*S), Math.round((fy2-camTopY())*S), 3, 3);
+      }
+    }
+  }
+  // 粒子
+  for (const p of particles){
+    px2.fillStyle = p.color;
+    px2.globalAlpha = Math.max(0, 1-p.age/p.ttl);
+    px2.fillRect(Math.round((p.x/16 - camLeftX())*S)-2, Math.round((p.y/16 - camTopY())*S)-2, 4, 4);
+    px2.globalAlpha = 1;
+  }
+}
+function renderInterior2D(t){
+  const ox = Math.round((0-camLeftX())*S), oy = Math.round((0-camTopY())*S);
+  const W = INT_W*S, H = INT_H*S;
+  px2.fillStyle = '#2b2115'; px2.fillRect(0,0,VIEW_W,VIEW_H);
+  px2.fillStyle = '#d8c49a'; px2.fillRect(ox-6, oy-30, W+12, 30);          // 北墙
+  px2.fillStyle = '#cbb691'; px2.fillRect(ox-10, oy-4, 10, H+8); px2.fillRect(ox+W, oy-4, 10, H+8);
+  px2.fillStyle = '#c09a66'; px2.fillRect(ox, oy, W, H);                   // 地板
+  px2.fillStyle = 'rgba(0,0,0,0.08)';
+  for (let r=16;r<H;r+=32) px2.fillRect(ox, oy+r, W, 2);
+  px2.fillStyle = '#9a4a48'; px2.fillRect(ox+W/2-54, oy+H/2-54, 108, 108); // 地毯
+  px2.fillStyle = '#b26055'; px2.fillRect(ox+W/2-35, oy+H/2-35, 70, 70);
+  px2.fillStyle = '#8a6a42';                                               // 门垫
+  px2.fillRect(ox+(INT_DOOR[0]-0.1)*S, oy+(INT_DOOR[1]-0.1)*S, 0.2*S+18, 0.2*S+18);
+  // 床
+  const bx = ox+9*S, by = oy+2*S;
+  px2.fillStyle = '#5a4a78'; px2.fillRect(bx, by, 2*S, S+8);
+  px2.fillStyle = '#6a7ac0'; px2.fillRect(bx+4, by+10, 2*S-8, S-2);
+  px2.fillStyle = '#f0ead8'; px2.fillRect(bx+S+6, by+12, 16, S-8);
+  // 桌
+  const tx2 = ox+3*S, ty2 = oy+3*S;
+  px2.fillStyle = '#6a4a22'; px2.fillRect(tx2+6, ty2+40, 8, 20); px2.fillRect(tx2+S+18, ty2+40, 8, 20);
+  px2.fillStyle = '#9a6a3a'; px2.fillRect(tx2, ty2+18, 2*S, 26);
+  px2.fillStyle = '#e8e4e0'; px2.fillRect(tx2+10, ty2+10, 6, 8);
+  px2.fillStyle = '#c05848'; px2.fillRect(tx2+38, ty2+22, 16, 8);
+  // 落地灯 + 光晕
+  const lx = ox+1*S, ly = oy+1*S;
+  px2.fillStyle = 'rgba(255,214,140,0.10)'; pxBlob(lx+16, ly+40, 90, 70);
+  px2.fillStyle = '#6a4a2c'; px2.fillRect(lx+14, ly+16, 4, 40);
+  px2.fillStyle = '#f2d488'; px2.fillRect(lx+4, ly+2, 24, 16);
+  // 玩家（室内）
+  drawEntity2D(player.form||'ditto', ['back','front','left','right'][player.dir], player.moving, player.x, player.y, t);
+}
 /* ---- 动作动画 + 粒子 ---- */
 function triggerAction(){
   if (player.form==='squirtle') spawnWater();
   actionAnim = {form: player.form, t: 0};
 }
 function spawnWater(){
-  if (!GEO) return;
+  if (!px2) return;
   const [tx,ty] = facingTile();
   const src = playerWorld();
-  const dst = {x: worldX(tx+0.5), z: worldZ(ty+0.5)};
+  const X = (src.x+MAP_W/2)*16, Y = (src.z+MAP_H/2)*16;
+  const dX = (tx+0.5+MAP_W/2-0.5)*16 - X, dY = (ty+0.5+MAP_H/2-0.5)*16 - Y;
   for (let i=0;i<10;i++){
-    const m = new THREE.Mesh(GEO.sphere, mat(0x5ab8e8, {transparent:true, opacity:0.9, dynamic:true}));
-    m.scale.set(0.05,0.05,0.05);
-    m.position.set(src.x + (Math.random()-0.5)*0.3, 0.7, src.z + (Math.random()-0.5)*0.3);
-    scene.add(m);
-    particles.push({mesh:m, vx:(dst.x-src.x)/0.35, vy:3+Math.random()*2, vz:(dst.z-src.z)/0.35, ttl:0.5, age:0});
+    particles.push({x:X+(Math.random()-0.5)*6, y:Y-10, vx:dX/0.35, vy:-40-Math.random()*20, vz:0, ttl:0.5, age:0, color:'#5ab8e8'});
   }
 }
 function updateParticles(dt){
   for (let i=particles.length-1;i>=0;i--){
     const p = particles[i];
     p.age += dt;
-    if (p.age >= p.ttl){ scene.remove(p.mesh); p.mesh.material.dispose && p.mesh.material.dispose(); particles.splice(i,1); continue; }
-    p.vy -= 14*dt;
-    p.mesh.position.x += p.vx*dt;
-    p.mesh.position.y += p.vy*dt;
-    p.mesh.position.z += p.vz*dt;
-    p.mesh.material.opacity = 1 - p.age/p.ttl;
+    if (p.age >= p.ttl){ particles.splice(i,1); continue; }
+    p.vy += 140*dt;
+    p.x += p.vx*dt; p.y += p.vy*dt;
   }
 }
-/* 彩色粒子爆发：收割/开垦/种植/敲击的落地反馈 */
+/* 彩色粒子爆发：收割/开垦/种植/敲击的落地反馈（x,z 为世界格坐标，hy 为抬升格数） */
 function spawnBurst(x, y, z, color, n, spread, up){
-  if (!GEO || !renderer) return;
+  if (!px2) return;
+  const X = (x+MAP_W/2)*16, Y = (z+MAP_H/2)*16 - (y||0.4)*16;
   for (let i=0;i<n;i++){
-    const m = new THREE.Mesh(GEO.sphere, mat(color, {transparent:true, opacity:0.95, dynamic:true}));
-    m.scale.setScalar(0.045+Math.random()*0.04);
-    m.position.set(x+(Math.random()-0.5)*(spread||0.3), (y||0.4)+Math.random()*0.2, z+(Math.random()-0.5)*(spread||0.3));
-    scene.add(m);
-    const a = Math.random()*Math.PI*2, sp = 0.8+Math.random()*1.4;
-    particles.push({mesh:m, vx:Math.cos(a)*sp, vy:(up||2.4)+Math.random()*1.6, vz:Math.sin(a)*sp, ttl:0.55, age:0});
+    const a = Math.random()*Math.PI*2, sp = (0.8+Math.random()*1.4)*16;
+    particles.push({x:X+(Math.random()-0.5)*(spread||0.3)*16, y:Y, vx:Math.cos(a)*sp, vy:-(up||2.4)*16, vz:0, ttl:0.55, age:0, color:cssColor(color)});
   }
 }
-/* 世界坐标 → 屏幕坐标，供 DOM 浮动文字定位 */
+/* 世界坐标 → 屏幕坐标，供 DOM 浮动文字定位（x,z 为世界格坐标） */
 function worldToScreen(x, y, z){
-  if (!camera) return null;
-  const v = new THREE.Vector3(x, y, z).project(camera);
-  if (v.z > 1) return null;
-  return { x:(v.x*0.5+0.5)*VIEW_W, y:(-v.y*0.5+0.5)*VIEW_H };
+  return { x:(x - camLeftX())*S, y:(z - camTopY())*S - (y!=null?y:1.2)*S };
 }
 function spawnFloater(text, wx, wz, color, hy){
   const wrap = $('floaters');
@@ -2713,13 +2952,14 @@ function setZoom(scale){
   camera.updateProjectionMatrix();
 }
 function applyCamera(){
+  if (!camera) return; // 2D 像素模式下无 3D 相机，camTarget 由 updateCamera2D 驱动
   camera.position.set(camTarget.x, CAM_OFF.y, camTarget.z + CAM_OFF.z);
   camera.lookAt(camTarget.x, 0, camTarget.z);
 }
 function snapCamera(){
   if (!camera) return;
-  if (inHouse){ camTarget.x = 0; camTarget.z = 0; setZoom(URL_ZOOM || 0.55); }
-  else { camTarget.x = clamp(playerWorld().x, -CLAMP_X, CLAMP_X); camTarget.z = clamp(playerWorld().z, -CLAMP_Z, CLAMP_Z); setZoom(URL_ZOOM || 1); }
+  if (inHouse){ camTarget.x = 0; camTarget.z = 0; setZoom(0.55); }
+  else { camTarget.x = clamp(playerWorld().x, -CLAMP_X, CLAMP_X); camTarget.z = clamp(playerWorld().z, -CLAMP_Z, CLAMP_Z); setZoom(1); }
   applyCamera();
 }
 function updateCamera(dt){
@@ -2745,11 +2985,12 @@ function updateCamera(dt){
 function update3D(dt, t){
   if (!renderer || !game) return;
   updateCamera(dt);
-  // 玩家位置
+  // 玩家位置（像素精灵：朝向决定贴图，走路双帧）
   const pw = playerWorld();
   playerMesh.position.set(pw.x, 0, pw.z);
-  playerMesh.rotation.y = [Math.PI, 0, -Math.PI/2, Math.PI/2][player.dir];
-  if (player.moving) playerMesh.position.y = Math.abs(Math.sin(player.walkT*10))*0.08;
+  setSpriteFacing(playerMesh, ['back','front','left','right'][player.dir]);
+  playerMesh.userData.moving = player.moving;
+  animateModel(playerMesh, t);
   // 变身过渡缩放
   const scale = 1 + Math.sin(Math.min(1,(actionAnim?actionAnim.t:1)/0.3)*Math.PI)*0.08;
   playerMesh.scale.set(scale, 1 + (scale-1)*0.4, scale);
@@ -2757,22 +2998,16 @@ function update3D(dt, t){
     actionAnim.t += dt;
     if (actionAnim.t > 0.5) actionAnim = null;
   }
-  // 玩家待机
-  if (playerMesh.userData.form){
-    animateModel(playerMesh, t);
-  }
-  // NPC（移动时朝移动方向转身）
+  // NPC（像素精灵：移动方向决定朝向贴图）
   for (const nm of npcMeshes){
     const n = nm.npc;
     const px0 = nm.group.position.x, pz0 = nm.group.position.z;
     nm.group.position.set(worldX(n.x), 0, worldZ(n.y));
     const mdx = nm.group.position.x - px0, mdz = nm.group.position.z - pz0;
-    if (mdx*mdx + mdz*mdz > 1e-8) nm.face = Math.atan2(mdx, mdz);
-    if (nm.face != null && n.id!=='snorlax'){
-      let d = nm.face - nm.group.rotation.y;
-      d = Math.atan2(Math.sin(d), Math.cos(d));
-      nm.group.rotation.y += d*Math.min(1, dt*7);
-    }
+    const moving = mdx*mdx + mdz*mdz > 1e-8;
+    if (moving) nm.face = Math.atan2(mdx, mdz);
+    nm.group.userData.moving = moving;
+    setSpriteFacing(nm.group, n.id==='snorlax' ? 'front' : (nm.face!=null ? facingToDir(nm.face) : 'front'));
     animateModel(nm.group, t + (n.id.length));
   }
   // 野生宝可梦
@@ -2781,16 +3016,14 @@ function update3D(dt, t){
     const px0 = wm.group.position.x, pz0 = wm.group.position.z;
     wm.group.position.set(worldX(w.x), 0, worldZ(w.y));
     const mdx = wm.group.position.x - px0, mdz = wm.group.position.z - pz0;
-    if (mdx*mdx + mdz*mdz > 1e-8) wm.face = Math.atan2(mdx, mdz);
-    if (wm.face != null){
-      let d = wm.face - wm.group.rotation.y;
-      d = Math.atan2(Math.sin(d), Math.cos(d));
-      wm.group.rotation.y += d*Math.min(1, dt*7);
-    }
+    const moving = mdx*mdx + mdz*mdz > 1e-8;
+    if (moving) wm.face = Math.atan2(mdx, mdz);
+    wm.group.userData.moving = moving;
+    setSpriteFacing(wm.group, wm.face!=null ? facingToDir(wm.face) : 'front');
     animateModel(wm.group, t + 3);
   }
-  // 喵喵
-  if (meowthMesh) animateModel(meowthMesh, t+7);
+  // 喵喵（店主持正面站姿）
+  if (meowthMesh){ meowthMesh.userData.moving = false; animateModel(meowthMesh, t+7); }
   // 树果成熟微光
   waterT += dt;
   for (const [i,m] of cropMeshes){
@@ -2943,7 +3176,10 @@ function frame(now){
   const dt = Math.min(0.05, (now-lastFrame)/1000 || 0.016);
   lastFrame = now;
   update(dt);
-  if (renderer){
+  if (USE_PIXEL_2D){
+    updateCamera2D(dt);
+    render2D(now/1000);
+  } else if (renderer){
     update3D(dt, now/1000);
     renderer.render(scene, camera);
   }
@@ -3016,20 +3252,12 @@ function loadThree(onDone){
 }
 
 bootSim();
-loadThree(ok => {
+// 全像素 2D 渲染：无需 Three.js / CDN，离线可玩
+(function(){
+  initRender2D();
   const loading = $('loading');
-  if (ok && typeof THREE !== 'undefined'){
-    try{
-      init3D();
-      if (loading) loading.style.display = 'none';
-    }catch(e){
-      console.error(e);
-      if (loading) loading.innerHTML = '3D 渲染初始化失败：<br>'+e.message;
-    }
-  } else {
-    if (loading) loading.innerHTML = '无法加载 Three.js（需要联网）。<br>游戏逻辑仍在运行，但无法显示画面。';
-  }
-});
+  if (loading) loading.style.display = 'none';
+})();
 
 window.addEventListener('beforeunload', ()=>{ if (game) saveGame(); });
 
@@ -3105,6 +3333,29 @@ if (typeof location!=='undefined' && location.hash==='#selftest'){
   if (document.readyState==='loading') document.addEventListener('DOMContentLoaded', ()=>setTimeout(runSelfTest, 300));
   else setTimeout(runSelfTest, 300);
 }
+/* 像素图鉴（#pixelart）：列出全部精灵×三向的原始像素图，便于校对 */
+function showPixelGallery(){
+  let html = '<h3>🎨 像素精灵图鉴（前 / 后 / 侧）</h3><div style="display:flex;flex-wrap:wrap;gap:14px">';
+  for (const id in PIXEL_ART){
+    html += '<div style="text-align:center"><b style="font-size:12px">'+(FORM_NAMES[id]||id)+'</b><br>';
+    for (const dirName of ['front','back','side']){
+      const cnv = pxCanvas(id, dirName, 0);
+      const img = document.createElement('canvas');
+      img.width = 96; img.height = 96;
+      const ictx = img.getContext('2d');
+      ictx.imageSmoothingEnabled = false;
+      ictx.drawImage(cnv, 0, 0, 96, 96);
+      html += '<img src="'+img.toDataURL()+'" style="image-rendering:pixelated;width:48px;height:48px;background:#8a8;margin:1px" title="'+dirName+'">';
+    }
+    html += '</div>';
+  }
+  html += '</div>';
+  showDialog(html, [{label:'关闭', ghost:true, fn:closeDialog}]);
+}
+if (typeof location!=='undefined' && location.hash==='#pixelart'){
+  if (document.readyState==='loading') document.addEventListener('DOMContentLoaded', ()=>setTimeout(showPixelGallery, 300));
+  else setTimeout(showPixelGallery, 300);
+}
 
 /* 测试用 API */
 window.GameAPI = {
@@ -3125,7 +3376,7 @@ window.GameAPI = {
   exportSave, importSave, encodeSaveCode, decodeSaveCode,
   idx, CROPS, ITEMS, fmtTime,
   update: (dt)=>{ update(dt); },
-  frameStep: (dt, t)=>{ update(dt); if (renderer){ update3D(dt, t||0); renderer.render(scene, camera); } },
+  frameStep: (dt, t)=>{ update(dt); if (USE_PIXEL_2D){ render2D(t||0); } else if (renderer){ update3D(dt, t||0); renderer.render(scene, camera); } },
   tick: (secs)=>{ const steps = Math.ceil(secs/0.016); for (let i=0;i<steps;i++) update(0.016); },
 };
 </script>
