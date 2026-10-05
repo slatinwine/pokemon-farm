@@ -120,9 +120,23 @@
     width:min(97vw,960px);padding:12px 20px;border-radius:16px;
     background:linear-gradient(180deg,#232d1a,#141c0e);border:2px solid rgba(255,215,94,.22);
     box-shadow:0 10px 30px rgba(0,0,0,.5)}
-  body.has-pad{flex-direction:column;gap:12px}
-  body.has-pad #wrap{width:min(97vw,960px,calc((100vh - 205px)*1.5))}
+  body.has-pad{flex-direction:column;gap:10px}
+  body.has-pad #wrap{width:min(97vw,960px,calc((100vh - 400px)*1.5))}
   body.has-pad #touchdeck{display:flex}
+  /* 顶部甲板：任务栏（引导）+ 工具栏（快捷栏）移出画面，放画面上方黑色区域 */
+  #topdeck{display:none}
+  body.has-pad #topdeck{display:flex;flex-direction:column;gap:8px;
+    width:min(97vw,960px);padding:10px 12px;border-radius:16px;
+    background:linear-gradient(180deg,#232d1a,#141c0e);border:2px solid rgba(255,215,94,.22);
+    box-shadow:0 10px 30px rgba(0,0,0,.5)}
+  body.has-pad #topdeck #guide{position:static;width:auto;max-height:112px;overflow:auto;
+    background:rgba(20,28,12,.5);box-shadow:none}
+  body.has-pad #topdeck #hotbar{position:static;transform:none;justify-content:center}
+  @media (min-width: 641px){
+    body.has-pad #topdeck{flex-direction:row;align-items:flex-start}
+    body.has-pad #topdeck #guide{width:280px;flex:none}
+    body.has-pad #topdeck #hotbar{flex:1}
+  }
   #tdpad{display:grid;grid-template-columns:repeat(3,54px);grid-template-rows:repeat(3,54px);gap:4px}
   #tbtns{display:grid;grid-template-columns:repeat(3,52px);grid-template-rows:repeat(3,52px);gap:4px}
   #tdpad button,#tbtns button{pointer-events:auto;background:linear-gradient(180deg,#3a4428,#242c18);color:#ffe9b0;
@@ -141,6 +155,39 @@
   #tmid .grille{width:90px;height:44px;border-radius:10px;
     background:repeating-linear-gradient(180deg,#2c3620 0 5px,#1a2212 5px 10px);
     border:2px solid rgba(255,215,94,.18)}
+  /* ---------- 小屏自适应：HUD 随手机缩放，避免"精灵小、面板大" ---------- */
+  @media (max-width: 640px){
+    #topbar{font-size:11.5px;padding:4px 8px;gap:6px;border-width:1.5px}
+    #energybar{width:150px;height:20px;top:38px;border-width:1.5px}
+    #energytxt{font-size:10px}
+    #formbar{top:64px;font-size:11px;padding:3px 8px;border-width:1.5px}
+    #guide{width:168px;top:94px;font-size:10.5px;line-height:1.75;padding:6px 9px;border-width:1.5px}
+    #guide h4{font-size:11px}
+    #hotbar{padding:4px;gap:4px;bottom:6px;border-width:1.5px;flex-wrap:wrap;justify-content:center;max-width:96%}
+    .slot{width:34px;height:34px;min-width:34px;max-width:34px;flex:0 0 34px;font-size:16px;border-radius:6px}
+    #hotbar.compact .slot{width:28px;height:28px;min-width:28px;max-width:28px;flex:0 0 28px;font-size:13px}
+    .slot .nm{font-size:7px}
+    .slot .cnt{font-size:9px}
+    .slot .kb{font-size:7px}
+    #hint{display:none}
+    #dlg-box{font-size:13.5px;padding:12px 14px}
+    .toast{font-size:12px;padding:5px 9px}
+    #menu-box{padding:14px 18px;width:88%}
+    #menu-box button{font-size:13px;padding:6px 12px;margin:5px 0}
+    #menu-box h2{font-size:20px}
+  }
+  /* 窄屏控制甲板：藏扬声器格栅给按键让位 */
+  @media (max-width: 520px){
+    #tmid{display:none}
+  }
+  /* 矮屏（横屏手机）：甲板紧凑化 */
+  @media (max-height: 560px){
+    body.has-pad #wrap{width:min(97vw, 960px, calc((100vh - 320px)*1.5))}
+    #touchdeck{padding:8px 14px}
+    #tdpad{grid-template-columns:repeat(3,40px);grid-template-rows:repeat(3,40px)}
+    #tbtns{grid-template-columns:repeat(3,38px);grid-template-rows:repeat(3,38px)}
+    body.has-pad #topdeck #guide{max-height:64px}
+  }
 </style>
 </head>
 <body>
@@ -196,6 +243,7 @@
 </div>
 
 <!-- Game Boy 式控制甲板：位于画面下方黑色区域（触屏/ #pad 时显示） -->
+<div id="topdeck"></div>
 <div id="touchdeck" class="hidden">
   <div id="tdpad">
     <span></span><button data-k="w" aria-label="上">▲</button><span></span>
@@ -220,6 +268,13 @@
 /* ---------------- 常量 ---------------- */
 const MAP_W = 48, MAP_H = 36;
 const VIEW_W = 960, VIEW_H = 640;
+/* 渲染分辨率自适应：小屏（手机）视野减半、整体放大一倍，精灵/地块显示尺寸×2 */
+const SMALL_SCREEN = (function(){ try{
+  if (typeof window==='undefined' || !window.innerWidth) return false;
+  return Math.min(window.innerWidth, window.innerHeight) < 520;
+}catch(e){ return false; } })();
+const RENDER_ZOOM = SMALL_SCREEN ? 2 : 1;
+const PX_VIEW_W = VIEW_W/RENDER_ZOOM, PX_VIEW_H = VIEW_H/RENDER_ZOOM; // 2D 逻辑画布尺寸
 const DAYS_PER_SEASON = 28;
 const MAX_ENERGY = 100;
 const INV_SLOTS = 9;
@@ -1730,8 +1785,13 @@ let GEO = null;
 const ASPECT = VIEW_W/VIEW_H;
 const CAM_H = 10.5;             // 半屏高度（世界单位 ≈ 可见纵向格数的一半）
 const CAM_OFF = {y:26, z:20};   // 相机相对注视点的偏移（决定俯视角）
-const DEAD_X = 8, DEAD_Z = 6;   // 跟随死区（玩家可偏离中心的格数）
-const CLAMP_X = 8, CLAMP_Z = 5; // 相机中心夹取范围（保证视野不出农场）
+/* 2D 像素渲染的格子尺寸与可视格数（桌面 30×20 / 手机 15×10） */
+const PX_SCALE = 2, TILE = 16, S = TILE*PX_SCALE; // 逻辑：每格 32 单位
+const VIEW_TW = Math.round(PX_VIEW_W/S), VIEW_TH = Math.round(PX_VIEW_H/S);
+const CLAMP_X = MAP_W/2 - VIEW_TW/2; // 相机中心范围：视野恰好不出地图
+const CLAMP_Z = MAP_H/2 - VIEW_TH/2;
+const DEAD_X = Math.max(2.5, VIEW_TW*0.25); // 跟随死区随视野缩放
+const DEAD_Z = Math.max(2, VIEW_TH*0.3);
 let camTarget = {x:0, z:0};
 
 const matCache = new Map();
@@ -2388,8 +2448,7 @@ function animateModel(g, t){
    2D 全像素渲染器（场景与人物皆为像素；旧 3D 渲染保留为后备路径）
    ===================================================================== */
 const USE_PIXEL_2D = true;
-const PX_SCALE = 2, TILE = 16, S = TILE*PX_SCALE; // 16px 美术 ×2 → 每格 32 屏幕像素
-const VIEW_TW = Math.round(VIEW_W/S), VIEW_TH = Math.round(VIEW_H/S); // 可视格数 30×20
+/* S / VIEW_TW / VIEW_TH 已在相机常量区定义（避免 const TDZ 引用顺序问题） */
 let px2 = null;
 function cssColor(hex){ return '#'+hex.toString(16).padStart(6,'0'); }
 function initRender2D(){
@@ -2560,8 +2619,10 @@ function drawEntity2D(id, dirName, moving, wx, wy, t, big){
 /* ---- 主渲染 ---- */
 function render2D(t){
   if (!px2 || !game) return;
+  px2.setTransform(1,0,0,1,0,0);
   px2.fillStyle = '#101c14';
   px2.fillRect(0, 0, VIEW_W, VIEW_H);
+  px2.setTransform(RENDER_ZOOM,0,0,RENDER_ZOOM,0,0); // 小屏放大：逻辑坐标不变，绘制尺寸×2
   if (inHouse){ renderInterior2D(t); return; }
   const x0 = Math.max(0, Math.floor(camLeftX())), x1 = Math.min(MAP_W-1, Math.ceil(camLeftX()+VIEW_TW));
   const y0 = Math.max(0, Math.floor(camTopY())), y1 = Math.min(MAP_H-1, Math.ceil(camTopY()+VIEW_TH));
@@ -2659,7 +2720,7 @@ function render2D(t){
 function renderInterior2D(t){
   const ox = Math.round((0-camLeftX())*S), oy = Math.round((0-camTopY())*S);
   const W = INT_W*S, H = INT_H*S;
-  px2.fillStyle = '#2b2115'; px2.fillRect(0,0,VIEW_W,VIEW_H);
+  px2.fillStyle = '#2b2115'; px2.fillRect(0,0,PX_VIEW_W,PX_VIEW_H);
   px2.fillStyle = '#d8c49a'; px2.fillRect(ox-6, oy-30, W+12, 30);          // 北墙
   px2.fillStyle = '#cbb691'; px2.fillRect(ox-10, oy-4, 10, H+8); px2.fillRect(ox+W, oy-4, 10, H+8);
   px2.fillStyle = '#c09a66'; px2.fillRect(ox, oy, W, H);                   // 地板
@@ -2721,9 +2782,9 @@ function spawnBurst(x, y, z, color, n, spread, up){
     particles.push({x:X+(Math.random()-0.5)*(spread||0.3)*16, y:Y, vx:Math.cos(a)*sp, vy:-(up||2.4)*16, vz:0, ttl:0.55, age:0, color:cssColor(color)});
   }
 }
-/* 世界坐标 → 屏幕坐标，供 DOM 浮动文字定位（x,z 为世界格坐标） */
+/* 世界坐标 → 画布坐标，供 DOM 浮动文字定位（x,z 为世界格坐标） */
 function worldToScreen(x, y, z){
-  return { x:(x - camLeftX())*S, y:(z - camTopY())*S - (y!=null?y:1.2)*S };
+  return { x:(x - camLeftX())*S*RENDER_ZOOM, y:((z - camTopY())*S - (y!=null?y:1.2)*S)*RENDER_ZOOM };
 }
 function spawnFloater(text, wx, wz, color, hy){
   const wrap = $('floaters');
@@ -3243,6 +3304,13 @@ function initTouch(){
   if (!isTouch && !force) return;
   document.body.classList.add('has-pad');
   ui.classList.remove('hidden');
+  // 任务栏（引导）与工具栏（快捷栏）移出画面，进顶部甲板黑色区域
+  const topdeck = $('topdeck');
+  if (topdeck){
+    const guide = $('guide'), hotbar = $('hotbar');
+    if (guide) topdeck.appendChild(guide);
+    if (hotbar) topdeck.appendChild(hotbar);
+  }
   const press = (el, on, off)=>{
     el.addEventListener('pointerdown', e=>{ e.preventDefault(); e.stopPropagation(); el.classList.add('on'); on(); });
     const end = e=>{ e.preventDefault(); el.classList.remove('on'); off && off(); };
