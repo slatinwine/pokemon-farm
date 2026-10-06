@@ -62,10 +62,12 @@
   #hotbar.compact .slot .nm{font-size:9px}
   #hint{position:absolute;left:8px;bottom:10px;font-size:12px;color:#efe3c0;background:rgba(20,14,6,.6);
     border-radius:8px;padding:5px 10px;letter-spacing:.3px}
-  #toasts{position:absolute;top:66px;right:10px;z-index:8;display:flex;flex-direction:column;gap:6px;align-items:flex-end}
-  .toast{background:rgba(24,16,6,.85);border:1px solid rgba(255,215,94,.45);color:#ffe9b0;padding:6px 12px;
-    border-radius:8px;font-size:14px;font-weight:600;box-shadow:0 3px 8px rgba(0,0,0,.4);animation:toastin .18s ease-out}
-  @keyframes toastin{from{transform:translateX(30px);opacity:0}to{transform:none;opacity:1}}
+  #toasts{position:absolute;top:0;left:0;right:0;z-index:14;display:flex;flex-direction:column;align-items:center;pointer-events:none}
+  .banner{margin-top:6px;max-width:88%;background:rgba(24,16,6,.92);border:1px solid rgba(255,215,94,.5);
+    color:#ffe9b0;padding:7px 16px;border-radius:20px;font-size:13.5px;font-weight:600;white-space:nowrap;
+    overflow:hidden;text-overflow:ellipsis;box-shadow:0 4px 14px rgba(0,0,0,.45);animation:bannin .25s ease-out}
+  .banner.out{opacity:0;transform:translateY(-14px);transition:opacity .28s,transform .28s}
+  @keyframes bannin{from{transform:translateY(-20px);opacity:0}to{transform:none;opacity:1}}
   #dialog{position:absolute;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;background:rgba(8,6,2,.5)}
   #dlg-box{width:min(92%,760px);max-height:86%;overflow:auto;background:linear-gradient(180deg,#f8eed6,#ecd9ae);
     color:#4a3018;border:4px solid #6a522b;border-radius:14px;padding:16px 20px;box-shadow:0 16px 50px rgba(0,0,0,.6);
@@ -121,7 +123,7 @@
     background:linear-gradient(180deg,#232d1a,#141c0e);border:2px solid rgba(255,215,94,.22);
     box-shadow:0 10px 30px rgba(0,0,0,.5)}
   body.has-pad{flex-direction:column;gap:10px}
-  body.has-pad #wrap{width:min(97vw,960px,calc((100vh - 400px)*1.5))}
+  body.has-pad #wrap{width:min(97vw,960px,calc((100vh - 460px)*1.5))}
   body.has-pad #touchdeck{display:flex}
   /* 顶部甲板：任务栏（引导）+ 工具栏（快捷栏）移出画面，放画面上方黑色区域 */
   #topdeck{display:none}
@@ -129,8 +131,10 @@
     width:min(97vw,960px);padding:10px 12px;border-radius:16px;
     background:linear-gradient(180deg,#232d1a,#141c0e);border:2px solid rgba(255,215,94,.22);
     box-shadow:0 10px 30px rgba(0,0,0,.5)}
-  body.has-pad #topdeck #guide{position:static;width:auto;max-height:112px;overflow:auto;
+  body.has-pad #topdeck #guide{position:static;width:auto;max-height:96px;overflow:auto;
     background:rgba(20,28,12,.5);box-shadow:none}
+  body.has-pad #topdeck #energybar{position:static;width:auto;height:22px}
+  body.has-pad #topdeck #formbar{position:static;align-self:center}
   body.has-pad #topdeck #hotbar{position:static;transform:none;justify-content:center}
   @media (min-width: 641px){
     body.has-pad #topdeck{flex-direction:row;align-items:flex-start}
@@ -171,7 +175,7 @@
     .slot .kb{font-size:7px}
     #hint{display:none}
     #dlg-box{font-size:13.5px;padding:12px 14px}
-    .toast{font-size:12px;padding:5px 9px}
+    .banner{font-size:11.5px;padding:6px 12px;max-width:92%}
     #menu-box{padding:14px 18px;width:88%}
     #menu-box button{font-size:13px;padding:6px 12px;margin:5px 0}
     #menu-box h2{font-size:20px}
@@ -833,13 +837,23 @@ function updateHud(){
 function updateFormHud(){
   $('formbar').textContent = '变身形态：' + (FORM_NAMES[player.form]||player.form);
 }
+let toastQueue = [], toastBusy = false;
 function toast(msg){
+  toastQueue.push(msg);
+  if (!toastBusy) nextToast();
+}
+function nextToast(){
   const box = $('toasts');
+  if (!box) { toastQueue = []; toastBusy = false; return; }
+  const msg = toastQueue.shift();
+  if (msg == null){ toastBusy = false; return; }
+  toastBusy = true;
+  box.innerHTML = '';
   const el = document.createElement('div');
-  el.className = 'toast';
+  el.className = 'banner';
   el.textContent = msg;
   box.appendChild(el);
-  setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .4s'; setTimeout(()=>el.remove(), 420); }, 2300);
+  setTimeout(()=>{ el.classList.add('out'); setTimeout(()=>{ el.remove(); nextToast(); }, 280); }, 1900);
 }
 
 /* ---------------- 新手引导清单 ---------------- */
@@ -1395,6 +1409,7 @@ function harvest(tx,ty){
   if (!c || c.rem>0) return;
   if (addItem('crop_'+c.type, 1) === false){ toast('背包已满！'); sfx('error'); return; }
   game.crops[tileIndexIn(tx,ty)] = null;
+  game.watered[tileIndexIn(tx,ty)] = 0; // 收割后清掉浇水痕迹（对空地浇水无意义）
   game.stats.harvested++;
   game.energy = Math.min(maxEnergy(), game.energy+1);
   sfx('harvest'); updateCrop3D(tx,ty);
@@ -3304,12 +3319,13 @@ function initTouch(){
   if (!isTouch && !force) return;
   document.body.classList.add('has-pad');
   ui.classList.remove('hidden');
-  // 任务栏（引导）与工具栏（快捷栏）移出画面，进顶部甲板黑色区域
+  // 任务栏（引导）、状态栏（体力/形态）、工具栏（快捷栏）移出画面，进顶部甲板黑色区域
   const topdeck = $('topdeck');
   if (topdeck){
-    const guide = $('guide'), hotbar = $('hotbar');
-    if (guide) topdeck.appendChild(guide);
-    if (hotbar) topdeck.appendChild(hotbar);
+    for (const id of ['guide','energybar','formbar','hotbar']){
+      const el = document.getElementById(id);
+      if (el) topdeck.appendChild(el);
+    }
   }
   const press = (el, on, off)=>{
     el.addEventListener('pointerdown', e=>{ e.preventDefault(); e.stopPropagation(); el.classList.add('on'); on(); });
