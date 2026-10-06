@@ -125,6 +125,10 @@
   body.has-pad{flex-direction:column;gap:10px;justify-content:flex-start;min-height:100vh;padding:8px 0}
   @supports (height: 100svh){ body.has-pad{min-height:100svh} }
   body.has-pad #wrap{width:min(97vw,960px,max(240px,calc((100vh - 460px)*1.5)))}
+  /* 手机上对话框/菜单全屏覆盖，商店等内容展得开、按钮够得着 */
+  body.has-pad #dialog{position:fixed;inset:0;z-index:60;align-items:center}
+  body.has-pad #menu{position:fixed;inset:0;z-index:60}
+  body.has-pad #dlg-box{width:min(94vw,560px);max-height:88vh}
   body.has-pad #touchdeck{display:flex}
   /* 顶部甲板：任务栏（引导）+ 工具栏（快捷栏）移出画面，放画面上方黑色区域 */
   #topdeck{display:none}
@@ -2570,12 +2574,22 @@ function initRender2D(){
   px2 = canvas.getContext('2d');
   px2.imageSmoothingEnabled = false;
 }
-function camLeftX(){ return inHouse ? (INT_W-VIEW_TW)/2 : camTarget.x + MAP_W/2 - VIEW_TW/2; }
-function camTopY(){ return inHouse ? (INT_H-VIEW_TH)/2 : camTarget.z + MAP_H/2 - VIEW_TH/2; }
+function camLeftX(){
+  if (inCave) return camTarget.x + INT_W/2 - VIEW_TW/2;
+  return inHouse ? (INT_W-VIEW_TW)/2 : camTarget.x + MAP_W/2 - VIEW_TW/2;
+}
+function camTopY(){
+  if (inCave) return camTarget.z + INT_H/2 - VIEW_TH/2;
+  return inHouse ? (INT_H-VIEW_TH)/2 : camTarget.z + MAP_H/2 - VIEW_TH/2;
+}
 /* 2D 相机跟随：死区 + 边界夹取（坐标与 3D 版一致，用 playerWorld 世界坐标） */
 function updateCamera2D(dt){
   if (!game) return;
-  if (inHouse){ camTarget.x = 0; camTarget.z = 0; return; }
+  if (inHouse && !inCave){ camTarget.x = 0; camTarget.z = 0; return; } // 家：整屋可见，固定镜头
+  // 洞内跟随（视野大于洞时退回固定中心）；室外用世界坐标
+  const halfW = inCave ? INT_W/2 - VIEW_TW/2 : MAP_W/2 - VIEW_TW/2;
+  const halfH = inCave ? INT_H/2 - VIEW_TH/2 : MAP_H/2 - VIEW_TH/2;
+  if (halfW <= 0 || halfH <= 0){ camTarget.x = 0; camTarget.z = 0; return; }
   const pw = playerWorld();
   const dx = pw.x - camTarget.x, dz = pw.z - camTarget.z;
   let tx = camTarget.x, tz = camTarget.z;
@@ -2584,8 +2598,8 @@ function updateCamera2D(dt){
   const k = Math.min(1, dt*8);
   camTarget.x += (tx - camTarget.x)*k;
   camTarget.z += (tz - camTarget.z)*k;
-  camTarget.x = clamp(camTarget.x, -CLAMP_X, CLAMP_X);
-  camTarget.z = clamp(camTarget.z, -CLAMP_Z, CLAMP_Z);
+  camTarget.x = clamp(camTarget.x, -halfW, halfW);
+  camTarget.z = clamp(camTarget.z, -halfH, halfH);
 }
 /* 像素椭圆（按行填充，保证像素感） */
 function pxBlob(cx, cy, rx, ry){
@@ -3213,10 +3227,13 @@ function applyCamera(){
 }
 function snapCamera(){
   // camTarget 对位对 2D/3D 都生效；setZoom/applyCamera 仅 3D 模式需要
-  if (inHouse){ camTarget.x = 0; camTarget.z = 0; }
+  if (inHouse && !inCave){ camTarget.x = 0; camTarget.z = 0; }
   else {
-    camTarget.x = clamp(playerWorld().x, -CLAMP_X, CLAMP_X);
-    camTarget.z = clamp(playerWorld().z, -CLAMP_Z, CLAMP_Z);
+    const cw = inCave ? INT_W/2 - VIEW_TW/2 : CLAMP_X;
+    const ch = inCave ? INT_H/2 - VIEW_TH/2 : CLAMP_Z;
+    const pw = playerWorld();
+    camTarget.x = clamp(pw.x, -cw, cw);
+    camTarget.z = clamp(pw.z, -ch, ch);
   }
   if (!camera) return; // 2D 像素模式：无 3D 相机可驱动
   setZoom(inHouse ? 0.55 : 1);
