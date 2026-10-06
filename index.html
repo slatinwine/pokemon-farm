@@ -2075,12 +2075,13 @@ function buildEntities(){
   rebuildWilds3D();
 }
 function rebuildNPCs3D(){
-  if (!GEO || !entityGroup || !game) return;
+  if (!game) return;
   // 读档/新游戏时 game 对象会整体替换，必须同步重建 NPC 模型，避免引用旧状态
-  for (const nm of npcMeshes) entityGroup.remove(nm.group);
+  if (entityGroup) for (const nm of npcMeshes) if (nm.group) entityGroup.remove(nm.group);
   npcMeshes = [];
   for (const n of game.npcs){
     if (!n || !n.id) continue;
+    if (!GEO || !entityGroup){ npcMeshes.push({npc:n}); continue; } // 2D 像素模式：仅数据项
     const g = buildPokemon(n.id);
     g.position.set(worldX(n.x), 0, worldZ(n.y));
     entityGroup.add(g);
@@ -2089,11 +2090,12 @@ function rebuildNPCs3D(){
 }
 let wildMeshes = [];
 function rebuildWilds3D(){
-  if (!GEO || !entityGroup || !game) return;
-  for (const wm of wildMeshes) entityGroup.remove(wm.group);
+  if (!game) return;
+  if (entityGroup) for (const wm of wildMeshes) if (wm.group) entityGroup.remove(wm.group);
   wildMeshes = [];
   for (const w of game.wilds||[]){
     if (!w || !WILD_POOL[w.id]) continue;
+    if (!GEO || !entityGroup){ wildMeshes.push({wild:w}); continue; } // 2D 像素模式：仅数据项
     const g = buildPokemon(w.id);
     g.position.set(worldX(w.x), 0, worldZ(w.y));
     entityGroup.add(g);
