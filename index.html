@@ -841,8 +841,15 @@ function updateFormHud(){
 }
 let toastQueue = [], toastBusy = false;
 function toast(msg){
+  if (toastQueue.length >= 3) toastQueue.shift(); // 队列限长：丢最旧的未播消息
   toastQueue.push(msg);
   if (!toastBusy) nextToast();
+}
+function clearToasts(){ // 过天/场景切换时丢弃全部未播消息，避免旧消息延迟到"第二天"
+  toastQueue = [];
+  toastBusy = false;
+  const box = $('toasts');
+  if (box) box.innerHTML = '';
 }
 function nextToast(){
   const box = $('toasts');
@@ -855,7 +862,8 @@ function nextToast(){
   el.className = 'banner';
   el.textContent = msg;
   box.appendChild(el);
-  setTimeout(()=>{ el.classList.add('out'); setTimeout(()=>{ el.remove(); nextToast(); }, 280); }, 1900);
+  const show = Math.min(2600, 1200 + msg.length*55); // 长消息多停留
+  setTimeout(()=>{ el.classList.add('out'); setTimeout(()=>{ el.remove(); nextToast(); }, 220); }, show);
 }
 
 /* ---------------- 新手引导清单 ---------------- */
@@ -1598,6 +1606,7 @@ function sleep(passedOut){
 }
 function rollWeather(season){ if (season==='winter') return 'snow'; return Math.random()<0.75 ? 'sunny' : 'rain'; }
 function advanceDay(passedOut){
+  clearToasts(); // 新的一天：丢弃昨天积压的未播消息
   const rainToday = game.weather==='rain';
   for (let i=0;i<game.crops.length;i++){
     const c = game.crops[i];
