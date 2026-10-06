@@ -3339,42 +3339,43 @@ function initTouch(){
     y: ()=>{ if (!menuOpen && !dialog) cycleSlot(1); },
     t: ()=>{ if (!menuOpen && !dialog && !forceSleeping) cycleWildForm(); },
   };
-  // 事件委托绑定在 document 捕获阶段：元素移动/重建/时机都不影响按键
-  const held = new Map(); // pointerId → button
-  const onDown = (e)=>{
-    const btn = e.target && e.target.closest ? e.target.closest('#touchdeck button') : null;
-    if (!btn) return;
-    e.preventDefault();
-    held.set(e.pointerId || 0, btn);
-    btn.classList.add('on');
+  // 触摸优先直绑按钮元素：touchstart+preventDefault 是触屏按键最可靠的路径，
+  // 同时屏蔽滚动/长按菜单/合成 click；桌面 #pad 调试走鼠标事件
+  const allHeld = [];
+  ui.querySelectorAll('button').forEach(btn=>{
     const k = btn.dataset.k;
-    if (k){ keys[k] = true; return; }
-    const fn = acts[btn.dataset.act];
-    if (fn) fn();
-  };
-  const onUp = (e)=>{
-    const btn = held.get(e.pointerId || 0);
-    if (!btn) return;
-    held.delete(e.pointerId || 0);
-    btn.classList.remove('on');
-    const k = btn.dataset.k;
-    if (k) keys[k] = false;
-  };
+    const act = acts[btn.dataset.act];
+    const down = (e)=>{
+      if (e.cancelable) e.preventDefault();
+      if (btn.classList.contains('on')) return; // 防重复触发
+      btn.classList.add('on');
+      allHeld.push(btn);
+      if (k) keys[k] = true;
+      else if (act) act();
+    };
+    const up = ()=>{
+      const i = allHeld.indexOf(btn);
+      if (i !== -1) allHeld.splice(i,1);
+      btn.classList.remove('on');
+      if (k) keys[k] = false;
+    };
+    btn.addEventListener('touchstart', down, {passive:false});
+    btn.addEventListener('touchend', up, {passive:false});
+    btn.addEventListener('touchcancel', up, {passive:false});
+    if (!isTouch){
+      btn.addEventListener('mousedown', down);
+      btn.addEventListener('mouseup', up);
+      btn.addEventListener('mouseleave', up);
+    }
+  });
   const releaseAll = ()=>{
-    held.forEach((btn)=>{ btn.classList.remove('on'); const k = btn.dataset.k; if (k) keys[k] = false; });
-    held.clear();
+    while (allHeld.length){
+      const btn = allHeld.pop();
+      btn.classList.remove('on');
+      const k = btn.dataset.k;
+      if (k) keys[k] = false;
+    }
   };
-  if (typeof PointerEvent !== 'undefined'){
-    document.addEventListener('pointerdown', onDown, true);
-    document.addEventListener('pointerup', onUp, true);
-    document.addEventListener('pointercancel', onUp, true);
-  } else {
-    document.addEventListener('touchstart', (e)=>{ const t = e.changedTouches && e.changedTouches[0]; if (t) onDown({target: t.target, pointerId: t.identifier, preventDefault: ()=>e.preventDefault()}); }, true);
-    document.addEventListener('touchend', (e)=>{ const t = e.changedTouches && e.changedTouches[0]; if (t) onUp({pointerId: t.identifier}); }, true);
-    document.addEventListener('mousedown', (e)=>onDown({target: e.target, pointerId: 0, preventDefault: ()=>e.preventDefault()}), true);
-    document.addEventListener('mouseup', ()=>onUp({pointerId: 0}), true);
-  }
-  document.addEventListener('contextmenu', e=>{ if (e.target && e.target.closest && e.target.closest('#touchdeck button')) e.preventDefault(); });
   // 切后台/失焦时释放全部按键，避免"松手了还在走"
   window.addEventListener('blur', releaseAll);
   document.addEventListener('visibilitychange', ()=>{ if (document.hidden) releaseAll(); });
