@@ -1628,7 +1628,7 @@ function enterHouse(){
   applyWorldVisibility(); updateHud(); updateFx(); snapCamera();
 }
 function exitHouse(){
-  inHouse = false;
+  inHouse = false; inCave = false; // 兜底：任何出屋路径都不允许残留洞内状态
   player.x = HOUSE.doorX+0.5; player.y = HOUSE.doorY+1.5;
   player.dir = 0; player.moving = false; player.mx=player.x; player.my=player.y;
   applyWorldVisibility(); updateHud(); updateFx(); snapCamera();
@@ -1680,7 +1680,9 @@ function sleep(passedOut){
   if (fadeEl) fadeEl.classList.add('on'); // 黑屏遮住过天瞬间
   advanceDay(passedOut);
   forceSleeping = false;
-  if (inHouse) exitHouse();
+  // 在山洞里晕倒/过天：正确出洞（否则 inCave 残留，镜头锁死、状态错乱）
+  if (inCave) exitCave();
+  else if (inHouse) exitHouse();
   if (fadeEl) setTimeout(()=>fadeEl.classList.remove('on'), 550); // 停顿一拍再"醒来"
   toast(passedOut ? '😵 体力耗尽，你晕倒了…' : '🌙 睡得真香！新的一天开始了');
   toast(SEASON_NAMES[game.season]+' 第'+game.day+'天 · '+WEATHER_ICONS[game.weather]+WEATHER_NAMES[game.weather]);
