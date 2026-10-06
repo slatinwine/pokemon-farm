@@ -155,6 +155,7 @@
   #tbtns button[data-act="b"]{color:#f2a0a0;border-color:rgba(230,130,110,.6)}
   #tbtns button[data-act="x"]{color:#9ac8f2;border-color:rgba(120,170,240,.6)}
   #tbtns button[data-act="y"]{color:#f2d488;border-color:rgba(240,200,110,.6)}
+  #tbtns button[data-act="t"]{color:#e2a8f2;border-color:rgba(200,140,240,.6);font-size:15px}
   #tbtns button i{font-style:normal;font-size:9px;font-weight:700;opacity:.8;margin-top:1px}
   #tmid{display:flex;align-items:center;justify-content:center}
   #tmid .grille{width:90px;height:44px;border-radius:10px;
@@ -258,7 +259,7 @@
   <div id="tmid"><span class="grille"></span></div>
   <div id="tbtns">
     <span></span><button data-act="x" aria-label="上一件物品">X<i>上件</i></button><span></span>
-    <button data-act="y" aria-label="下一件物品">Y<i>下件</i></button><span></span><button data-act="a" aria-label="使用">A<i>使用</i></button>
+    <button data-act="y" aria-label="下一件物品">Y<i>下件</i></button><button data-act="t" aria-label="变身">T<i>变身</i></button><button data-act="a" aria-label="使用">A<i>使用</i></button>
     <span></span><button data-act="b" aria-label="互动">B<i>互动</i></button><span></span>
   </div>
 </div>
@@ -3330,12 +3331,13 @@ function initTouch(){
       if (el) topdeck.appendChild(el);
     }
   }
-  // A 使用 / B 互动 / X 上一件 / Y 下一件
+  // A 使用 / B 互动 / X 上一件 / Y 下一件 / T 变身（挚友形态）
   const acts = {
     a: ()=>{ if (!menuOpen && !dialog && !forceSleeping) useSelected(); },
     b: ()=>{ if (!menuOpen && !dialog && !forceSleeping) interact(); },
     x: ()=>{ if (!menuOpen && !dialog) cycleSlot(-1); },
     y: ()=>{ if (!menuOpen && !dialog) cycleSlot(1); },
+    t: ()=>{ if (!menuOpen && !dialog && !forceSleeping) cycleWildForm(); },
   };
   // 事件委托绑定在 document 捕获阶段：元素移动/重建/时机都不影响按键
   const held = new Map(); // pointerId → button
