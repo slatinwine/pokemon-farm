@@ -295,7 +295,8 @@ const WEATHER_NAMES = {sunny:'晴', rain:'雨', snow:'雪'};
 const WEATHER_ICONS = {sunny:'☀️', rain:'🌧️', snow:'❄️'};
 
 const T_GRASS=0, T_TILLED=1, T_PATH=2, T_WATER=3, T_FLOOR=4, T_WALL=5;
-const D_NONE=0, D_TREE=1, D_STUMP=2, D_ROCK=3, D_TALL=4, D_FLOWER=5;
+const D_NONE=0, D_TREE=1, D_STUMP=2, D_ROCK=3, D_TALL=4, D_FLOWER=5, D_CRYSTAL=6;
+const CAVE = {x:42, y:5}; // 山洞入口（东北角石拱门，占 2 格）
 
 const HOUSE = {x:10, y:8, w:5, h:4, doorX:12, doorY:11};
 const SHOP  = {x:34, y:22, w:2, h:2};
@@ -330,6 +331,7 @@ for (const id in CROPS){
   ITEMS['seed_'+id] = {name:c.name+'种', kind:'seed', crop:id, icon:'🌱', buy:c.seed};
   ITEMS['crop_'+id] = {name:c.name, kind:'crop', icon:c.icon, sell:c.sell, energy:c.energy};
 }
+ITEMS['crystal'] = {name:'晶石', kind:'loot', icon:'💎', sell:120}; // 山洞晶矿产物
 ITEMS.wood  = {name:'木材', kind:'material', icon:'🪵', sell:2};
 ITEMS.stone = {name:'石头', kind:'material', icon:'🪨', sell:2};
 ITEMS.salad = {name:'哞哞鲜乳', kind:'food', icon:'🥛', sell:50, energy:30, buy:100};
@@ -463,6 +465,7 @@ function genInterior(){
 /* ---------------- 游戏状态 ---------------- */
 let game = null, interior = null;
 let inHouse = false;
+let inCave = false, homeInterior = null, caveData = null; // 山洞副本状态
 let player = {x:12.5, y:13.5, dir:1, moving:false, mx:12.5, my:13.5, walkT:0, form:'ditto'};
 let selected = 0;
 let dialog = null, menuOpen = false, soundOn = true, forceSleeping = false;
@@ -526,6 +529,7 @@ function saveGame(){
       stats:game.stats, npcs:game.npcs, npcLine:game.npcLine, toolLevel:game.toolLevel,
       skills:game.skills, bagLv:game.bagLv,
       guide:game.guide, guideDone:game.guideDone, achv:game.achv,
+      inCave,
       wild:game.wild, wilds:game.wilds, wildForm:game.wildForm,
       player:{x:player.x,y:player.y,dir:player.dir}, inHouse, selected, soundOn,
     };
@@ -673,6 +677,8 @@ function loadGame(){
     interior = genInterior();
     initWildFriendship();
     inHouse = !!d.inHouse;
+    inCave = !!d.inCave;
+    if (inCave){ caveData = genCave(); interior = caveData; } // 存档时在洞内：恢复洞图（矿点重置）
     soundOn = typeof d.soundOn === 'boolean' ? d.soundOn : true;
     const maxX = inHouse ? INT_W-1 : MAP_W-1;
     const maxY = inHouse ? INT_H-1 : MAP_H-1;
@@ -696,6 +702,7 @@ function loadGame(){
 function interiorSolid(tx,ty){
   if (tx<0||ty<0||tx>=INT_W||ty>=INT_H) return true;
   if (interior.tile[idxI(tx,ty)]===T_WALL) return true;
+  if (inCave) return false; // 洞内没有床桌家具
   for (const [bx,by] of BED_TILES) if (bx===tx&&by===ty) return true;
   for (const [bx,by] of TABLE_TILES) if (bx===tx&&by===ty) return true;
   return false;
@@ -708,6 +715,7 @@ function isSolid(tx,ty){
   if (game.deco[i]===D_TREE||game.deco[i]===D_ROCK) return true;
   if (tx>=HOUSE.x&&tx<HOUSE.x+HOUSE.w&&ty>=HOUSE.y&&ty<HOUSE.y+HOUSE.h) return true;
   if (tx>=SHOP.x&&tx<SHOP.x+SHOP.w&&ty>=SHOP.y&&ty<SHOP.y+SHOP.h) return true;
+  if (Math.abs(tx-CAVE.x)<=1 && ty===CAVE.y) return true; // 山洞口石拱门
   return false;
 }
 
@@ -829,7 +837,7 @@ function updateHud(){
   if (game.energy < 20) $('energybar').classList.add('low');
   else $('energybar').classList.remove('low');
   $('energytxt').textContent = '体力 '+Math.max(0,Math.round(game.energy))+'/'+mE;
-  let hint = inHouse ? 'E 睡觉 / 出门 · 屋内不能使用工具' : 'WASD/方向键 移动 · 空格/左键 使用 · E/右键 互动 · 1-9/滚轮 选物品 · Esc 菜单';
+  let hint = inCave ? '镐敲矿 · 💎晶石值钱 · 出口按 E 回地面' : (inHouse ? 'E 睡觉 / 出门 · 屋内不能使用工具' : 'WASD/方向键 移动 · 空格/左键 使用 · E/右键 互动 · 1-9/滚轮 选物品 · Esc 菜单');
   if (!inHouse && hasSkill('dash')) hint = hint.replace('移动 ·', '移动(Shift冲刺) ·');
   if (!inHouse && hasSkill('sunlight')) hint += ' · F 日光束';
   const wildLearned = game && game.wild && Object.values(game.wild).some(w=>w.learned);
@@ -1295,8 +1303,8 @@ function facingTile(){
   return [px+d[0], py+d[1]];
 }
 function tileIndexIn(tx,ty){ return inHouse ? idxI(tx,ty) : idx(tx,ty); }
-function tileAt(tx,ty){ return inHouse ? interior.tile[tileIndexIn(tx,ty)] : game.tile[tileIndexIn(tx,ty)]; }
-function decoAt(tx,ty){ return inHouse ? D_NONE : game.deco[tileIndexIn(tx,ty)]; }
+function tileAt(tx,ty){ if (inCave) return caveData.tile[idxI(tx,ty)]; return inHouse ? interior.tile[tileIndexIn(tx,ty)] : game.tile[tileIndexIn(tx,ty)]; }
+function decoAt(tx,ty){ if (inCave) return caveData.deco[idxI(tx,ty)]; return inHouse ? D_NONE : game.deco[tileIndexIn(tx,ty)]; }
 function cropAt(tx,ty){ return inHouse ? null : game.crops[tileIndexIn(tx,ty)]; }
 function wateredAt(tx,ty){ return inHouse ? 0 : game.watered[tileIndexIn(tx,ty)]; }
 
@@ -1306,8 +1314,11 @@ function useSelected(){
 }
 function useOnTile(tx,ty){
   if (!game || forceSleeping) return;
-  if (inHouse){ toast('屋内不能使用工具'); return; }
-  if (tx<0||ty<0||tx>=MAP_W||ty>=MAP_H) return;
+  const sel0 = game.inv[selected];
+  const item0 = sel0 && sel0.id ? ITEMS[sel0.id] : null;
+  if (inHouse && !(inCave && sel0 && sel0.id==='tool_pick')){ toast(inCave?'洞里只能用镐敲矿':'屋内不能使用工具'); return; }
+  if (inCave){ tx = clamp(tx,0,INT_W-1); ty = clamp(ty,0,INT_H-1); }
+  else if (tx<0||ty<0||tx>=MAP_W||ty>=MAP_H) return;
   const i = tileIndexIn(tx,ty);
   const sel = game.inv[selected];
   const item = sel && sel.id ? ITEMS[sel.id] : null;
@@ -1366,12 +1377,35 @@ function useOnTile(tx,ty){
       break;
     }
     case 'tool_pick': {
-      if (decoAt(tx,ty)!==D_ROCK){ toast('这里没有石头'); return; }
+      const di = decoAt(tx,ty);
       const pickCost = Math.max(1, cost - (hasSkill('rockblast')?1:0)); // 岩崩省力
       if (game.energy<pickCost){ toast('体力不足！'); sfx('error'); return; }
-      game.deco[i]=D_NONE; game.energy-=pickCost; game.stats.mined++;
+      if (inCave){
+        const ci = idxI(tx,ty);
+        if (di===D_CRYSTAL){
+          if (addItem('crystal',1) === false){ toast('背包已满！'); sfx('error'); return; }
+          caveData.deco[ci]=D_NONE; caveData.tile[ci]=T_FLOOR;
+          game.energy-=pickCost; game.stats.mined++;
+          toast('💎 敲下了晶石！');
+          triggerAction(); sfx('mine');
+          spawnBurst(tx-31.5, 0.4, ty-15.5, 0x7ae8e0, 10, 0.4, 2.4); // 洞内坐标换算
+          break;
+        }
+        if (di!==D_ROCK){ toast('这里没有矿石'); return; }
+        if (addItem('stone', (hasSkill('rockblast')?4:2)+(learnedWild('magnemite')?1:0)) === false){ toast('背包已满！'); sfx('error'); return; }
+        const caveStone = (hasSkill('rockblast') ? 4 : 2) + (learnedWild('magnemite')?1:0);
+        caveData.deco[ci]=D_NONE; caveData.tile[ci]=T_FLOOR;
+        game.energy-=pickCost; game.stats.mined++;
+        toast('获得 石头 ×'+caveStone);
+        triggerAction(); sfx('mine');
+        spawnBurst(tx-31.5, 0.4, ty-15.5, 0x9aa0a8, 8, 0.4, 2.0);
+        break;
+      }
+      if (di!==D_ROCK){ toast('这里没有石头'); return; }
       const stoneYield = (hasSkill('rockblast') ? 4 : 2) + (learnedWild('magnemite')?1:0); // 岩崩/磁力
-      addItem('stone', stoneYield); toast('获得 石头 ×'+stoneYield);
+      if (addItem('stone', stoneYield) === false){ toast('背包已满！'); sfx('error'); return; }
+      game.deco[i]=D_NONE; game.energy-=pickCost; game.stats.mined++;
+      toast('获得 石头 ×'+stoneYield);
       triggerAction(); sfx('mine'); updateDeco3D(tx,ty);
       spawnBurst(worldX(tx+0.5), 0.4, worldZ(ty+0.5), 0x9aa0a8, 8, 0.4, 2.0);
       break;
@@ -1494,6 +1528,11 @@ function interact(){
 }
 function interactAt(tx,ty){
   if (!game || forceSleeping) return;
+  if (inCave){
+    if (tx===INT_DOOR[0] && ty===INT_DOOR[1]){ exitCave(); return; }
+    toast('用镐（选镐子朝矿点按空格）敲矿');
+    return;
+  }
   if (inHouse){
     for (const [bx,by] of BED_TILES) if (bx===tx&&by===ty){ showConfirm('要睡觉休息吗？（结束今天，进入下一天）', ()=>sleep(false)); return; }
     if (tx===INT_DOOR[0] && ty===INT_DOOR[1]){ exitHouse(); return; }
@@ -1501,6 +1540,7 @@ function interactAt(tx,ty){
     return;
   }
   if (tx>=SHOP.x&&tx<SHOP.x+SHOP.w&&ty>=SHOP.y&&ty<SHOP.y+SHOP.h){ openShop(); return; }
+  if (Math.abs(tx-CAVE.x)<=1 && ty===CAVE.y){ enterCave(); return; }
   const npc = npcAt(tx,ty);
   if (npc){ talk(npc); return; }
   const wild = wildAt(tx,ty);
@@ -1590,6 +1630,44 @@ function exitHouse(){
   applyWorldVisibility(); updateHud(); updateFx(); snapCamera();
 }
 
+/* ---------------- 山洞副本（矿点每天刷新） ---------------- */
+function genCave(){
+  const tile = new Uint8Array(INT_W*INT_H);
+  const deco = new Uint8Array(INT_W*INT_H);
+  for (let y=0;y<INT_H;y++) for (let x=0;x<INT_W;x++)
+    tile[idxI(x,y)] = (x===0||y===0||x===INT_W-1||y===INT_H-1) ? T_WALL : T_FLOOR;
+  const R = Math.random;
+  const place = (kind, n)=>{
+    let guard = 0;
+    while (n>0 && guard++ < 500){
+      const x = 1+Math.floor(R()*(INT_W-2)), y = 1+Math.floor(R()*(INT_H-2));
+      const i = idxI(x,y);
+      if (tile[i]!==T_FLOOR || deco[i]!==D_NONE) continue;
+      if (Math.abs(x-INT_DOOR[0])<=1 && y>=INT_H-3) continue; // 出口通道留空
+      tile[i] = T_WALL; deco[i] = kind; n--;
+    }
+  };
+  place(D_ROCK, 16);
+  place(D_CRYSTAL, 4);
+  return {tile, deco, watered:new Uint8Array(INT_W*INT_H), crops:new Array(INT_W*INT_H).fill(null)};
+}
+function enterCave(){
+  if (!caveData) caveData = genCave();
+  homeInterior = interior; interior = caveData;
+  inHouse = true; inCave = true;
+  player.x = INT_DOOR[0]+0.5; player.y = INT_DOOR[1]-0.5;
+  player.dir = 0; player.moving = false; player.mx=player.x; player.my=player.y;
+  applyWorldVisibility(); updateHud(); updateFx(); snapCamera();
+  toast('🕳 进入山洞：用镐敲矿，晶矿出晶石，矿点每天刷新');
+}
+function exitCave(){
+  inHouse = false; inCave = false;
+  if (homeInterior) interior = homeInterior;
+  player.x = CAVE.x+1; player.y = CAVE.y+1; // 回到洞口下方
+  player.dir = 1; player.moving = false; player.mx=player.x; player.my=player.y;
+  applyWorldVisibility(); updateHud(); updateFx(); snapCamera();
+}
+
 /* ---------------- 睡觉 / 过天 ---------------- */
 function sleep(passedOut){
   fishing = null;
@@ -1634,6 +1712,7 @@ function advanceDay(passedOut){
   game.stats.daysPlayed++;
   markGuide('sleep');
   if (game.stats.daysPlayed>=112) unlockAchv('four_seasons');
+  if (inCave){ caveData = genCave(); interior = caveData; } // 洞内矿点每天刷新
   saveGame();
   refreshWorld3D();
   rebuildWilds3D();
@@ -1651,8 +1730,16 @@ function regrow(){
     game.deco[i] = kind;
     updateDeco3D(x,y);
   };
-  for (let n=0;n<2;n++) if (R()<0.5) trySpawn(D_TREE);
-  for (let n=0;n<1;n++) if (R()<0.5) trySpawn(D_ROCK);
+  // 资源保底：统计存量，低于目标数量每天自动补充，石头/木材永远够用
+  let rocks = 0, trees = 0;
+  for (let i=0;i<game.deco.length;i++){
+    if (game.deco[i]===D_ROCK) rocks++;
+    else if (game.deco[i]===D_TREE) trees++;
+  }
+  const rockNeed = Math.min(2, Math.max(0, 12 - rocks)); // 石头目标 12 块：每日最多补 2
+  for (let n=0;n<rockNeed;n++) trySpawn(D_ROCK);
+  const treeNeed = Math.min(2, Math.max(0, 26 - trees)); // 树木目标 26 棵：每日最多补 2
+  for (let n=0;n<treeNeed;n++) if (R()<0.75) trySpawn(D_TREE);
 }
 
 /* ---------------- 菜单 ---------------- */
@@ -2620,6 +2707,15 @@ function drawHouse2D(){
   px2.fillStyle = '#8a5a48'; px2.fillRect(x0+W-26, y0+4, 12, 18);          // 烟囱
   px2.fillStyle = '#5a3a30'; px2.fillRect(x0+W-28, y0+2, 16, 4);
 }
+function drawCaveMouth(){
+  const x0 = Math.round((CAVE.x-camLeftX())*S), y0 = Math.round((CAVE.y-camTopY())*S);
+  px2.fillStyle = '#443f52'; px2.fillRect(x0-3, y0, 2*S+6, 14);          // 顶檐
+  px2.fillStyle = '#5a5462'; px2.fillRect(x0, y0+8, 2*S, S-8);           // 石体
+  px2.fillStyle = '#6a6472'; px2.fillRect(x0+4, y0+6, 8, S-6); px2.fillRect(x0+2*S-12, y0+6, 8, S-6); // 边柱
+  px2.fillStyle = '#141020'; px2.fillRect(x0+14, y0+14, 2*S-28, S-16);   // 黑洞口
+  px2.fillStyle = 'rgba(255,224,150,0.25)'; px2.fillRect(x0+14, y0+S-8, 2*S-28, 5); // 口内微光
+  px2.fillStyle = '#8a6a30'; px2.fillRect(x0+2*S/2-2, y0+10, 4, S-10);   // 拱门中缝
+}
 function drawShop2D(){
   const x0 = Math.round((SHOP.x-camLeftX())*S), y0 = Math.round((SHOP.y-camTopY())*S);
   const W = SHOP.w*S, H = SHOP.h*S;
@@ -2651,7 +2747,7 @@ function render2D(t){
   px2.fillStyle = '#101c14';
   px2.fillRect(0, 0, VIEW_W, VIEW_H);
   px2.setTransform(RENDER_ZOOM,0,0,RENDER_ZOOM,0,0); // 小屏放大：逻辑坐标不变，绘制尺寸×2
-  if (inHouse){ renderInterior2D(t); return; }
+  if (inHouse){ if (inCave) renderCave2D(t); else renderInterior2D(t); return; }
   const x0 = Math.max(0, Math.floor(camLeftX())), x1 = Math.min(MAP_W-1, Math.ceil(camLeftX()+VIEW_TW));
   const y0 = Math.max(0, Math.floor(camTopY())), y1 = Math.min(MAP_H-1, Math.ceil(camTopY()+VIEW_TH));
   for (let y=y0;y<=y1;y++) for (let x=x0;x<=x1;x++) drawTile2D(x, y, game.tile[idx(x,y)]);
@@ -2676,6 +2772,7 @@ function render2D(t){
   }
   items.push({y:HOUSE.y+HOUSE.h, f:drawHouse2D});
   items.push({y:SHOP.y+SHOP.h, f:drawShop2D});
+  items.push({y:CAVE.y+1, f:drawCaveMouth});
   items.push({y:SHOP.y+1.9, f:()=>drawEntity2D('meowth','front',false,SHOP.x+1.8,SHOP.y+1.9,t)});
   for (const nm of npcMeshes){
     const n = nm.npc;
@@ -2744,6 +2841,53 @@ function render2D(t){
     px2.fillRect(Math.round((p.x/16 - camLeftX())*S)-2, Math.round((p.y/16 - camTopY())*S)-2, 4, 4);
     px2.globalAlpha = 1;
   }
+}
+/* ---- 山洞副本渲染 ---- */
+function renderCave2D(t){
+  const x0 = Math.max(0, Math.floor(camLeftX())), x1 = Math.min(INT_W-1, Math.ceil(camLeftX()+VIEW_TW));
+  const y0 = Math.max(0, Math.floor(camTopY())), y1 = Math.min(INT_H-1, Math.ceil(camTopY()+VIEW_TH));
+  for (let y=y0;y<=y1;y++) for (let x=x0;x<=x1;x++){
+    const bx = Math.round((x-camLeftX())*S), by = Math.round((y-camTopY())*S);
+    const i = idxI(x,y);
+    const h = hash2(x,y);
+    const d = caveData.deco[i];
+    if (caveData.tile[i]===T_WALL && d===D_NONE){ // 岩壁
+      px2.fillStyle = (h%2) ? '#3a3540' : '#413b47';
+      px2.fillRect(bx, by, S, S);
+      px2.fillStyle = 'rgba(255,255,255,0.05)';
+      px2.fillRect(bx+(h%10)+2, by+((h>>4)%10)+2, 3, 2);
+    } else { // 洞底石地
+      px2.fillStyle = (h%2) ? '#4a4150' : '#524860';
+      px2.fillRect(bx, by, S, S);
+      px2.fillStyle = 'rgba(0,0,0,0.12)';
+      px2.fillRect(bx+(h%12)+2, by+((h>>5)%12)+2, 3, 2);
+    }
+    const cx = Math.round((x+0.5-camLeftX())*S), cy = Math.round((y+0.8-camTopY())*S);
+    if (d===D_ROCK){ // 石矿
+      px2.fillStyle = '#666b74'; pxBlob(cx, cy-4, 12, 8);
+      px2.fillStyle = '#83888f'; pxBlob(cx-4, cy-8, 6, 4);
+      px2.fillStyle = 'rgba(255,255,255,0.14)'; px2.fillRect(cx-6, cy-11, 4, 2);
+    } else if (d===D_CRYSTAL){ // 晶矿
+      px2.fillStyle = '#565060'; pxBlob(cx, cy-3, 12, 7);
+      px2.fillStyle = '#7ae8e0';
+      px2.fillRect(cx-6, cy-12, 4, 7); px2.fillRect(cx+1, cy-14, 4, 9); px2.fillRect(cx-1, cy-9, 3, 5);
+      px2.fillStyle = '#c8fff8'; px2.fillRect(cx+2, cy-13, 2, 3);
+      if (Math.floor(t*2.5 + h%7)%3===0){ px2.fillStyle = 'rgba(255,255,255,0.8)'; px2.fillRect(cx+6, cy-16, 2, 2); }
+    }
+  }
+  // 出口光斑
+  const ex = Math.round((INT_DOOR[0]+0.5-camLeftX())*S), ey = Math.round((INT_DOOR[1]+0.5-camTopY())*S);
+  px2.fillStyle = 'rgba(255,224,150,0.16)'; pxBlob(ex, ey, 30, 20);
+  px2.fillStyle = '#e8c878'; px2.fillRect(ex-11, ey-7, 22, 13);
+  px2.fillStyle = '#8a6a30'; for (let r=-5;r<=5;r+=5) px2.fillRect(ex-11, ey+r, 22, 2);
+  // 玩家
+  drawEntity2D(player.form||'ditto', ['back','front','left','right'][player.dir], player.moving, player.x, player.y, t);
+  // 洞窟暗角
+  px2.fillStyle = 'rgba(8,6,14,0.45)';
+  px2.fillRect(0, 0, PX_VIEW_W, 14);
+  px2.fillRect(0, PX_VIEW_H-20, PX_VIEW_W, 20);
+  px2.fillRect(0, 0, 10, PX_VIEW_H);
+  px2.fillRect(PX_VIEW_W-10, 0, 10, PX_VIEW_H);
 }
 function renderInterior2D(t){
   const ox = Math.round((0-camLeftX())*S), oy = Math.round((0-camTopY())*S);
