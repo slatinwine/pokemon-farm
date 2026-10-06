@@ -278,7 +278,7 @@ const SMALL_SCREEN = (function(){ try{
   if (typeof window==='undefined' || !window.innerWidth) return false;
   return Math.min(window.innerWidth, window.innerHeight) < 520;
 }catch(e){ return false; } })();
-const RENDER_ZOOM = SMALL_SCREEN ? 2 : 1;
+const RENDER_ZOOM = SMALL_SCREEN ? 3 : 1;
 const PX_VIEW_W = VIEW_W/RENDER_ZOOM, PX_VIEW_H = VIEW_H/RENDER_ZOOM; // 2D 逻辑画布尺寸
 const DAYS_PER_SEASON = 28;
 const MAX_ENERGY = 100;
@@ -1803,7 +1803,7 @@ const CAM_H = 10.5;             // 半屏高度（世界单位 ≈ 可见纵向�
 const CAM_OFF = {y:26, z:20};   // 相机相对注视点的偏移（决定俯视角）
 /* 2D 像素渲染的格子尺寸与可视格数（桌面 30×20 / 手机 15×10） */
 const PX_SCALE = 2, TILE = 16, S = TILE*PX_SCALE; // 逻辑：每格 32 单位
-const VIEW_TW = Math.round(PX_VIEW_W/S), VIEW_TH = Math.round(PX_VIEW_H/S);
+const VIEW_TW = Math.round(PX_VIEW_W/S), VIEW_TH = Math.round(PX_VIEW_H/S); // 可视格数：桌面 30×20 / 手机 10×7（拉近）
 const CLAMP_X = MAP_W/2 - VIEW_TW/2; // 相机中心范围：视野恰好不出地图
 const CLAMP_Z = MAP_H/2 - VIEW_TH/2;
 const DEAD_X = Math.max(2.5, VIEW_TW*0.25); // 跟随死区随视野缩放
