@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>宝可梦农场 · 百变怪的农庄</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌱</text></svg>">
 <style>
@@ -45,12 +45,12 @@
     background:rgba(20,14,6,.72);border:2px solid rgba(255,215,94,.4);overflow:hidden;box-shadow:0 3px 10px rgba(0,0,0,.35)}
   #energyfill{height:100%;width:100%;background:linear-gradient(180deg,#ffe08a,#ffb52e);transition:width .25s}
   #energytxt{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#4a2e08;text-shadow:0 1px 0 rgba(255,255,255,.35)}
-  #formbar{position:absolute;left:8px;top:94px;background:rgba(20,28,12,.72);border:2px solid rgba(255,215,94,.4);
-    border-radius:10px;padding:4px 12px;font-size:13px;font-weight:600;box-shadow:0 3px 10px rgba(0,0,0,.35)}
+  #formbar{position:absolute;left:8px;top:94px;max-width:min(46vw,560px);background:rgba(20,28,12,.72);border:2px solid rgba(255,215,94,.4);
+    border-radius:10px;padding:4px 12px;font-size:13px;font-weight:600;box-shadow:0 3px 10px rgba(0,0,0,.35);line-height:1.5}
   #hotbar{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);display:flex;gap:6px;
     background:rgba(20,28,12,.72);border:2px solid rgba(255,215,94,.4);padding:6px;border-radius:12px;
     box-shadow:0 4px 14px rgba(0,0,0,.4);pointer-events:auto}
-  .slot{width:52px;height:52px;border-radius:8px;border:2px solid #4a3a1e;background:#6a522b;display:flex;
+  .slot{width:52px;height:52px;padding:0;border-radius:8px;border:2px solid #4a3a1e;background:#6a522b;display:flex;
     flex-direction:column;align-items:center;justify-content:center;gap:1px;font-size:22px;color:#fff;cursor:pointer;
     position:relative;transition:transform .08s}
   .slot .nm{position:absolute;bottom:1px;font-size:10px;font-weight:700;color:#ffe9b0;text-shadow:0 1px 2px #000}
@@ -117,61 +117,65 @@
   #guide h4{color:#ffd75e;font-size:13px;margin-bottom:2px;letter-spacing:1px}
   #guide .gdone{color:#8fd070;text-decoration:line-through;opacity:.7}
   #guide.out{opacity:0}
-  /* ---------- Game Boy 式控制甲板（画面下方，触屏/#pad 时显示） ---------- */
-  #touchdeck{display:none;justify-content:space-between;align-items:center;position:relative;z-index:5;
-    width:min(97vw,960px);padding:12px 20px;border-radius:16px;
-    background:linear-gradient(180deg,#232d1a,#141c0e);border:2px solid rgba(255,215,94,.22);
-    box-shadow:0 10px 30px rgba(0,0,0,.5)}
-  body.has-pad{flex-direction:column;gap:10px;justify-content:flex-start;min-height:100vh;padding:8px 0}
-  @supports (height: 100svh){ body.has-pad{min-height:100svh} }
-  body.has-pad #wrap{width:min(97vw,960px,max(240px,calc((100vh - 460px)*1.5)))}
+  /* ---------- 手机：自动全屏 + 按键透明悬浮（触屏/#pad 时启用） ---------- */
+  #touchdeck{display:none;justify-content:space-between;align-items:flex-end;position:fixed;left:0;right:0;bottom:0;z-index:9;
+    padding:10px 16px calc(14px + env(safe-area-inset-bottom,0px));pointer-events:none}
+  #touchdeck button{pointer-events:auto}
+  #tmid{display:none} /* 悬浮样式不需要扬声器格栅 */
+  body.has-pad{padding:0}
+  @supports (height: 100dvh){ body.has-pad{height:100dvh;min-height:100dvh} }
+  /* 游戏画布铺满全屏：3:2 画布等比放大居中，多余部分露出背景 */
+  body.has-pad #wrap{width:100vw;height:100vh;max-height:100dvh;aspect-ratio:auto;border:none;border-radius:0;
+    box-shadow:none;background:#101c14;display:flex;align-items:center;justify-content:center}
+  body.has-pad #wrap canvas{width:auto;height:auto;max-width:100%;max-height:100%}
   /* 手机上对话框/菜单全屏覆盖，商店等内容展得开、按钮够得着 */
   body.has-pad #dialog{position:fixed;inset:0;z-index:60;align-items:center}
   body.has-pad #menu{position:fixed;inset:0;z-index:60}
-  body.has-pad #dlg-box{width:min(94vw,560px);max-height:88vh}
+  body.has-pad #dlg-box{width:min(94vw,560px);max-height:88dvh}
   body.has-pad #touchdeck{display:flex}
-  /* 顶部甲板：任务栏（引导）+ 工具栏（快捷栏）移出画面，放画面上方黑色区域 */
-  #topdeck{display:none}
-  body.has-pad #topdeck{display:flex;flex-direction:column;gap:8px;
-    width:min(97vw,960px);padding:10px 12px;border-radius:16px;
-    background:linear-gradient(180deg,#232d1a,#141c0e);border:2px solid rgba(255,215,94,.22);
-    box-shadow:0 10px 30px rgba(0,0,0,.5)}
-  body.has-pad #topdeck #guide{position:static;width:auto;max-height:96px;overflow:auto;
-    background:rgba(20,28,12,.5);box-shadow:none}
-  body.has-pad #topdeck #energybar{position:static;width:auto;height:22px}
-  body.has-pad #topdeck #formbar{position:static;align-self:center}
-  body.has-pad #topdeck #hotbar{position:static;transform:none;justify-content:center}
-  @media (min-width: 641px){
-    body.has-pad #topdeck{flex-direction:row;align-items:flex-start}
-    body.has-pad #topdeck #guide{width:280px;flex:none}
-    body.has-pad #topdeck #hotbar{flex:1}
+  /* 工具栏：收缩成居中胶囊（宽度只包住格子），不再通栏压在按键上方 */
+  body.has-pad #hotbar{left:50%;right:auto;width:max-content;max-width:calc(100vw - 16px);
+    transform:translateX(-50%);bottom:196px;background:rgba(26,34,16,.45);
+    backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px)}
+  /* 横屏：胶囊落到画面底部，正好嵌在方向键与动作键之间 */
+  @media (orientation:landscape){
+    body.has-pad #hotbar{bottom:12px}
   }
+  body.has-pad #hint{display:none}
+  #topdeck{display:none !important}    /* 旧甲板布局废弃，HUD 直接悬浮在画面上 */
   #tdpad{display:grid;grid-template-columns:repeat(3,54px);grid-template-rows:repeat(3,54px);gap:4px}
-  #tbtns{display:grid;grid-template-columns:repeat(3,52px);grid-template-rows:repeat(3,52px);gap:4px}
-  #tdpad button,#tbtns button{pointer-events:auto;background:linear-gradient(180deg,#3a4428,#242c18);color:#ffe9b0;
-    border:2px solid rgba(255,215,94,.4);border-radius:12px;font-size:20px;font-weight:800;
+  #tbtns{display:grid;grid-template-columns:repeat(3,54px);grid-template-rows:repeat(3,54px);gap:4px}
+  #tdpad button,#tbtns button{pointer-events:auto;background:rgba(26,34,16,.42);color:#ffe9b0;
+    border:2px solid rgba(255,215,94,.38);border-radius:14px;font-size:20px;font-weight:800;
     display:flex;flex-direction:column;align-items:center;justify-content:center;touch-action:none;
     -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;line-height:1;
-    box-shadow:0 3px 0 rgba(0,0,0,.45)}
-  #tdpad button.on,#tbtns button.on,#tdpad button:active,#tbtns button:active{transform:translateY(2px) scale(.94);box-shadow:0 1px 0 rgba(0,0,0,.45);filter:brightness(1.9);background:#8a6a24;border-color:#ffd75e}
+    backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px);
+    box-shadow:0 2px 8px rgba(0,0,0,.35)}
+  #tdpad button.on,#tbtns button.on,#tdpad button:active,#tbtns button:active{transform:translateY(2px) scale(.94);
+    box-shadow:0 1px 4px rgba(0,0,0,.35);filter:brightness(1.9);background:rgba(190,150,60,.75);border-color:#ffd75e}
   #tbtns button{border-radius:50%}
-  #tbtns button[data-act="a"]{color:#9fe08a;border-color:rgba(140,220,110,.6)}
-  #tbtns button[data-act="b"]{color:#f2a0a0;border-color:rgba(230,130,110,.6)}
-  #tbtns button[data-act="x"]{color:#9ac8f2;border-color:rgba(120,170,240,.6)}
-  #tbtns button[data-act="y"]{color:#f2d488;border-color:rgba(240,200,110,.6)}
-  #tbtns button[data-act="t"]{color:#e2a8f2;border-color:rgba(200,140,240,.6);font-size:15px}
+  #tbtns button[data-act="a"]{color:#9fe08a;border-color:rgba(140,220,110,.55)}
+  #tbtns button[data-act="b"]{color:#f2a0a0;border-color:rgba(230,130,110,.55)}
+  #tbtns button[data-act="x"]{color:#9ac8f2;border-color:rgba(120,170,240,.55)}
+  #tbtns button[data-act="y"]{color:#f2d488;border-color:rgba(240,200,110,.55)}
+  #tbtns button[data-act="t"]{color:#e2a8f2;border-color:rgba(200,140,240,.55);font-size:15px}
   #tbtns button i{font-style:normal;font-size:9px;font-weight:700;opacity:.8;margin-top:1px}
-  #tmid{display:flex;align-items:center;justify-content:center}
-  #tmid .grille{width:90px;height:44px;border-radius:10px;
-    background:repeating-linear-gradient(180deg,#2c3620 0 5px,#1a2212 5px 10px);
-    border:2px solid rgba(255,215,94,.18)}
+  /* 竖屏引导遮罩：手机竖屏时提示横过来（横屏全屏体验最佳） */
+  #rotate-hint{display:none;position:fixed;inset:0;z-index:80;background:rgba(8,14,6,.96);
+    flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;padding:30px}
+  #rotate-hint.on{display:flex}
+  #rotate-hint .phone{font-size:56px;line-height:1;animation:rotHint 1.8s ease-in-out infinite}
+  @keyframes rotHint{0%,15%{transform:rotate(0)}55%,85%{transform:rotate(90deg)}100%{transform:rotate(90deg)}}
+  #rotate-hint b{font-size:19px;color:#ffd75e;letter-spacing:1px}
+  #rotate-hint p{font-size:13.5px;color:#d9c89a;line-height:1.9}
+  #rotate-hint button{margin-top:8px}
   /* ---------- 小屏自适应：HUD 随手机缩放，避免"精灵小、面板大" ---------- */
   @media (max-width: 640px){
     #topbar{font-size:11.5px;padding:4px 8px;gap:6px;border-width:1.5px}
     #energybar{width:150px;height:20px;top:38px;border-width:1.5px}
     #energytxt{font-size:10px}
-    #formbar{top:64px;font-size:11px;padding:3px 8px;border-width:1.5px}
-    #guide{width:168px;top:94px;font-size:10.5px;line-height:1.75;padding:6px 9px;border-width:1.5px}
+    #formbar{top:64px;max-width:calc(100vw - 20px);font-size:11px;padding:3px 8px;border-width:1.5px}
+    #guide{width:168px;top:118px;font-size:10.5px;line-height:1.75;padding:6px 9px;border-width:1.5px}
     #guide h4{font-size:11px}
     #hotbar{padding:4px;gap:4px;bottom:6px;border-width:1.5px;flex-wrap:wrap;justify-content:center;max-width:96%}
     .slot{width:34px;height:34px;min-width:34px;max-width:34px;flex:0 0 34px;font-size:16px;border-radius:6px}
@@ -190,13 +194,12 @@
   @media (max-width: 520px){
     #tmid{display:none}
   }
-  /* 矮屏（横屏手机）：甲板紧凑化 */
+  /* 矮屏（小屏横屏手机）：悬浮按键与工具栏格子缩小，胶囊嵌进底部空档 */
   @media (max-height: 560px){
-    body.has-pad #wrap{width:min(97vw, 960px, calc((100vh - 320px)*1.5))}
-    #touchdeck{padding:8px 14px}
-    #tdpad{grid-template-columns:repeat(3,40px);grid-template-rows:repeat(3,40px)}
-    #tbtns{grid-template-columns:repeat(3,38px);grid-template-rows:repeat(3,38px)}
-    body.has-pad #topdeck #guide{max-height:64px}
+    #tdpad{grid-template-columns:repeat(3,42px);grid-template-rows:repeat(3,42px)}
+    #tbtns{grid-template-columns:repeat(3,42px);grid-template-rows:repeat(3,42px)}
+    .slot{width:32px;height:32px;min-width:32px;max-width:32px;flex:0 0 32px;font-size:15px}
+    body.has-pad #guide{max-height:64px}
   }
 </style>
 </head>
@@ -242,18 +245,25 @@
       <button data-act="import">📥 导入存档</button>
       <button data-act="new">🌱 新游戏</button>
       <button data-act="sound">🔊 声音：开</button>
-      <button data-act="help">❓ 操作说明</button>
+      <button data-act="map">🗺 农场地图</button>
+      <button data-act="help">❓ 玩法说明</button>
       <button data-act="stats">📊 农场统计</button>
       <div id="menu-sub"></div>
-      <div id="menu-ver">🌱 百变怪的农庄 v1.0</div>
+      <div id="menu-ver">🌱 百变怪的农庄 v1.1</div>
     </div>
   </div>
 
   <div id="loading">加载中…</div>
 </div>
 
-<!-- Game Boy 式控制甲板：位于画面下方黑色区域（触屏/ #pad 时显示） -->
+<!-- 触屏悬浮按键（方向键 + 动作键，透明浮在画面上）；#topdeck 为旧布局占位已废弃 -->
 <div id="topdeck"></div>
+<div id="rotate-hint">
+  <div class="phone">📱</div>
+  <b>请把手机横过来</b>
+  <p>横屏 + 全屏体验最佳<br>（竖屏也能玩，但画面会小很多）</p>
+  <button id="rotate-skip" class="ghost">仍要竖屏游玩</button>
+</div>
 <div id="touchdeck" class="hidden">
   <div id="tdpad">
     <span></span><button data-k="w" aria-label="上">▲</button><span></span>
@@ -343,6 +353,31 @@ ITEMS.tool_rod = {name:'可达鸭钓竿', kind:'tool', icon:'🎣', form:'psyduc
 ITEMS.fish_magikarp = {name:'鲤鱼王', kind:'food', icon:'🐟', sell:30, energy:6};
 ITEMS.fish_goldeen   = {name:'角金鱼', kind:'food', icon:'🐠', sell:70, energy:12};
 ITEMS.fish_gyarados  = {name:'暴鲤龙', kind:'food', icon:'🐋', sell:600, energy:40};
+
+/* 快捷栏物品的「人话」说明：悬停提示 + 左下形态栏展示 */
+const ITEM_TIPS = {
+  tool_hoe :'把草地开垦成耕地——种东西的第一步',
+  tool_can :'给耕地浇水；浇过水（或下雨）作物才会生长',
+  tool_axe :'砍树 → 得木材（升级工具的材料）',
+  tool_pick:'敲石头 → 得石头；进山洞还能挖矿',
+  tool_rod :'面向池塘甩竿钓鱼，看到「咬钩」马上收竿',
+  salad    :'吃的：选中后按 空格 回复体力 30',
+  wood     :'材料：杂货摊升级工具用，也可以卖',
+  stone    :'材料：杂货摊升级工具用，也可以卖',
+  crystal  :'山洞里的稀有矿产，卖给喵喵很值钱',
+};
+function itemTip(id){
+  const it = ITEMS[id];
+  if (!it) return '';
+  if (ITEM_TIPS[id]) return ITEM_TIPS[id];
+  if (it.kind==='seed'){
+    const c = CROPS[it.crop];
+    return '种在耕地上（'+SEASON_NAMES[c.season[0]]+'季 · '+c.days+' 天成熟 · 果实卖 '+c.sell+'₽）';
+  }
+  if (it.kind==='crop') return '收获的树果：卖 '+it.sell+'₽，或选中后按 空格 吃掉（体力+'+it.energy+'）';
+  if (it.kind==='food') return '食物：卖 '+it.sell+'₽，或选中后按 空格 吃掉（体力+'+it.energy+'）';
+  return '';
+}
 
 /* 变身形态中文名 */
 const FORM_NAMES = {
@@ -516,8 +551,8 @@ function newGame(){
   rebuildNPCs3D();
   rebuildWilds3D();
   snapCamera();
-  showMsg(['亲爱的训练家：','欢迎来到百变怪的农庄！百变怪会用「变身」替你干活。','选中锄头会变成地鼠开垦，选中水壶变成车厘龟浇水，','选中镰刀变成飞天螳螂砍树，选中镐子变成小拳石敲石头。','种下树果，收获后卖给喵喵的杂货摊吧！','带上钓竿到池塘边，还能变成可达鸭钓鱼哦！','跟着左上角的「🌟 农活入门」清单做，很快就能上手。'], ()=>{
-    toast('提示：按 Esc 可查看操作说明');
+  showMsg(['亲爱的训练家：','欢迎来到百变怪的农庄！跟着左上角「🌟 农活入门」做，5 分钟就能上手：','① 选 ⛏ 地鼠锄，面对草地按 空格 → 开垦成耕地','② 选 🌱 树果种，面对耕地按 空格 → 种下','③ 选 💧 车厘龟壶，按 空格 → 浇水','④ 按 M 打开地图，走回西侧的小屋，门口按 E 进屋','⑤ 走到床边，面向床按 E → 睡觉，作物过天生长','⑥ 第二天收获树果，到 🛒 喵喵杂货摊（按 E）卖钱','⚠ 时间凌晨 2:00 会晕倒（第二天体力只剩 6 成），困了记得回床上睡觉！','💡 打开菜单 / 对话框 / 地图时时间暂停，可以慢慢想。'], ()=>{
+    toast('提示：Esc 菜单里有完整玩法说明 · M 查看地图');
   });
 }
 
@@ -735,6 +770,7 @@ document.addEventListener('keydown', e=>{
   if (k===' ' && !menuOpen && !dialog && !forceSleeping) useSelected();
   if (k==='f' && !menuOpen && !dialog && !forceSleeping) useSunlight();
   if (k==='t' && !menuOpen && !dialog && !forceSleeping) cycleWildForm();
+  if (k==='m' && !menuOpen && !dialog && !forceSleeping) showFarmMap();
   if (k==='q' && !menuOpen && !dialog) cycleSlot(-1);
   if (k==='r' && !menuOpen && !dialog) cycleSlot(1);
   const n = parseInt(k,10);
@@ -832,7 +868,7 @@ function fmtTime(t){
 function updateHud(){
   if (!game) return;
   $('hud-date').textContent = SEASON_ICONS[game.season]+' '+SEASON_NAMES[game.season]+' 第'+game.day+'天';
-  $('hud-time').textContent = fmtTime(game.time);
+  $('hud-time').textContent = fmtTime(game.time) + (uiBlocked() ? ' ⏸' : '');
   $('hud-weather').textContent = WEATHER_ICONS[game.weather]+' '+WEATHER_NAMES[game.weather];
   $('hud-gold').textContent = '₽ '+game.gold;
   const mE = maxEnergy();
@@ -841,7 +877,7 @@ function updateHud(){
   if (game.energy < 20) $('energybar').classList.add('low');
   else $('energybar').classList.remove('low');
   $('energytxt').textContent = '体力 '+Math.max(0,Math.round(game.energy))+'/'+mE;
-  let hint = inCave ? '镐敲矿 · 💎晶石值钱 · 出口按 E 回地面' : (inHouse ? 'E 睡觉 / 出门 · 屋内不能使用工具' : 'WASD/方向键 移动 · 空格/左键 使用 · E/右键 互动 · 1-9/滚轮 选物品 · Esc 菜单');
+  let hint = inCave ? '镐敲矿 · 💎晶石值钱 · 出口按 E 回地面' : (inHouse ? '走到床上按 E 睡觉 · 下方大门按 E 出去 · 屋内不能用工具' : 'WASD 移动 · 空格 使用 · E 互动 · M 地图 · Esc 菜单（打开菜单/对话时间暂停）');
   if (!inHouse && hasSkill('dash')) hint = hint.replace('移动 ·', '移动(Shift冲刺) ·');
   if (!inHouse && hasSkill('sunlight')) hint += ' · F 日光束';
   const wildLearned = game && game.wild && Object.values(game.wild).some(w=>w.learned);
@@ -849,7 +885,11 @@ function updateHud(){
   $('hint').textContent = hint;
 }
 function updateFormHud(){
-  $('formbar').textContent = '变身形态：' + (FORM_NAMES[player.form]||player.form);
+  const sel = game && game.inv[selected];
+  const it = (sel && sel.id) ? ITEMS[sel.id] : null;
+  // 形态栏顺带解释当前选中物品是干什么的（手机没有悬停提示，全靠这里）
+  $('formbar').textContent = '变身形态：' + (FORM_NAMES[player.form]||player.form) +
+    (it ? ' · '+it.icon+' '+it.name+' — '+itemTip(sel.id) : ' · （空手：按 Q/R 或 1-9 选一件物品）');
 }
 let toastQueue = [], toastBusy = false;
 function toast(msg){
@@ -883,7 +923,7 @@ const GUIDE_STEPS = [
   {id:'till',    label:'开垦草地（选锄头点草地）'},
   {id:'plant',   label:'种下树果（选种子点耕地）'},
   {id:'water',   label:'浇水（选水壶点耕地）'},
-  {id:'sleep',   label:'睡觉到第二天（屋里上床）'},
+  {id:'sleep',   label:'上床睡觉：进小屋，走到床边按 E'},
   {id:'harvest', label:'收获成熟的树果'},
   {id:'sell',    label:'卖给喵喵换金币'},
 ];
@@ -952,7 +992,7 @@ function renderHotbar(){
       btn.innerHTML = kb+'<span>'+item.icon+'</span>';
       if (item.form) btn.innerHTML += '<span class="nm">'+FORM_NAMES[item.form]+'</span>';
       if (slot.n>1) btn.innerHTML += '<span class="cnt">×'+slot.n+'</span>';
-      btn.title = item.name;
+      btn.title = item.icon+' '+item.name+'\n'+itemTip(slot.id);
     } else {
       btn.innerHTML = kb+'<span style="opacity:.35">·</span>';
     }
@@ -1022,7 +1062,7 @@ function showDialog(html, actions){
   }
   $('dialog').classList.remove('hidden');
 }
-function closeDialog(){ dialog = null; $('dialog').classList.add('hidden'); }
+function closeDialog(){ dialog = null; $('dialog').classList.add('hidden'); if (game) updateHud(); }
 let msgQueue = [], msgDone = null;
 function showMsg(lines, onDone){ msgQueue = lines.slice(); msgDone = onDone||null; nextMsg(); }
 function nextMsg(){
@@ -1538,7 +1578,7 @@ function interactAt(tx,ty){
     return;
   }
   if (inHouse){
-    for (const [bx,by] of BED_TILES) if (bx===tx&&by===ty){ showConfirm('要睡觉休息吗？（结束今天，进入下一天）', ()=>sleep(false)); return; }
+    for (const [bx,by] of BED_TILES) if (bx===tx&&by===ty){ showConfirm('要上床睡觉吗？（过到第二天：作物生长、体力回满）', ()=>sleep(false)); return; }
     if (tx===INT_DOOR[0] && ty===INT_DOOR[1]){ exitHouse(); return; }
     toast('这里没什么特别的');
     return;
@@ -1691,6 +1731,7 @@ function sleep(passedOut){
 function rollWeather(season){ if (season==='winter') return 'snow'; return Math.random()<0.75 ? 'sunny' : 'rain'; }
 function advanceDay(passedOut){
   clearToasts(); // 新的一天：丢弃昨天积压的未播消息
+  sleepWarned = false;
   const rainToday = game.weather==='rain';
   for (let i=0;i<game.crops.length;i++){
     const c = game.crops[i];
@@ -1750,7 +1791,7 @@ function regrow(){
 
 /* ---------------- 菜单 ---------------- */
 function openMenu(){ menuOpen = true; fishing = null; hideTip(); $('menu').classList.remove('hidden'); updateMenuSound(); }
-function closeMenu(){ menuOpen = false; $('menu').classList.add('hidden'); $('menu-sub').innerHTML=''; }
+function closeMenu(){ menuOpen = false; $('menu').classList.add('hidden'); $('menu-sub').innerHTML=''; if (game) updateHud(); }
 function updateMenuSound(){ $('menu').querySelector('[data-act="sound"]').textContent = (soundOn?'🔊 声音：开':'🔇 声音：关'); }
 function showSub(html){ $('menu-sub').innerHTML = html; }
 $('menu').querySelectorAll('button').forEach(b=>{
@@ -1763,8 +1804,9 @@ $('menu').querySelectorAll('button').forEach(b=>{
     else if (act==='import'){ closeMenu(); importSave(); }
     else if (act==='new'){ closeMenu(); showConfirm('确定要开始新游戏吗？当前进度会被覆盖。', ()=>{ newGame(); saveGame(); toast('🌱 新的农庄生活开始了！'); }); }
     else if (act==='sound'){ soundOn = !soundOn; updateMenuSound(); if (soundOn) sfx('coin'); }
+    else if (act==='map'){ closeMenu(); showFarmMap(); }
     else if (act==='help'){
-      showSub('<b>🎮 操作</b><br>WASD / 方向键 — 移动<br>空格 / 鼠标左键 — 使用选中物品<br>E / 鼠标右键 — 互动（进门/睡觉/对话/商店/收获）<br>1~9 / 滚轮 — 选快捷栏；Q / R 循环<br>Esc — 菜单<br><br><b>🔄 百变怪的变身</b><br>· 选中不同工具，百变怪会变身：<br>&nbsp;&nbsp;⛏ 地鼠锄 → 地鼠（开垦）<br>&nbsp;&nbsp;💧 车厘龟壶 → 车厘龟（浇水）<br>&nbsp;&nbsp;🗡 螳螂镰 → 飞天螳螂（砍树）<br>&nbsp;&nbsp;👊 拳石镐 → 小拳石（敲石头）<br>&nbsp;&nbsp;🌱 种子 → 妙蛙种子（种植）<br>&nbsp;&nbsp;🎣 钓竿 → 可达鸭（钓鱼）<br><br><b>🌾 玩法</b><br>· 开垦草地 → 种树果 → 浇水 → 睡觉后生长<br>· 雨天自动浇水；冬季可种雪绒果<br>· 收获树果卖给喵喵杂货摊换 ₽<br>· 池塘边钓鱼：甩竿后等「咬钩」，快速按 空格 收竿<br>· 砍树/敲石得的木材、石头可在商店升级工具（省体力）<br><br><b>✨ 技能研习（商店·随成长解锁）</b><br>· ⚡ 电光一闪：按住 Shift 冲刺移动<br>· 💧 求雨圈：浇水范围 3×3<br>· 🌪 旋风刀 / 🪨 岩崩：砍伐/开采产出翻倍且省体力<br>· 🎣 悠闲垂钓：鱼更快咬钩、更难逃脱<br>· 💤 卡比兽之力：体力上限 +25<br>· 🌱 日光束：按 F 浇灌并催熟周围 5×5 作物<br>· 🎒 背包扩容：金币购买，最多 18 格（第 10 格起用滚轮/点击选择）<br><br><b>🌿 野生宝可梦</b><br>· 每天有野生 波波/小磁怪/走路草 出没在草地上<br>· 按 E 互动：聊天 +5、喂食树果/鱼 +15（每天各一次）<br>· 好感 100 成为挚友：百变怪学会变身成它（按 T 切换）并获得被动<br>&nbsp;&nbsp;波波「顺风」移速+25% · 小磁怪「磁力」伐木采石+1 · 走路草「晨露」浇水省体力');
+      showSub('<b>🕰 时间与睡觉（最重要，先看这里）</b><br>· 一天 = 早上 6:00 ～ 凌晨 2:00（流速与星露谷相同：10 游戏分钟 ≈ 7 秒）<br>· <b>打开菜单 / 对话框 / 地图时，时间会暂停</b>，可以慢慢看、慢慢想<br>· <b>怎么睡觉</b>：走到<b>小屋</b>（农场西侧，按 M 看地图）→ 门口按 E 进屋 → 走到床上 → 面向床按 <b>E</b> → 确认<br>· 睡觉后：作物生长一天、体力回满、进入新的一天<br>· 凌晨 2:00 还没睡会<b>晕倒</b>：直接过天，第二天体力只剩 6 成<br>· 体力耗尽同样会晕倒；吃树果 / 哞哞鲜乳可以回复<br><br><b>🎮 操作</b><br>WASD / 方向键 — 移动 · 空格 / 鼠标左键 — 使用手中物品<br>E / 鼠标右键 — 互动（进门 / 上床睡觉 / 对话 / 商店 / 收获）<br>1~9 / 滚轮 — 选快捷栏；Q / R 循环 · M — 农场地图 · Esc — 菜单<br>左下角的黄条是<b>体力</b>，用完了会晕倒<br><br><b>🧰 快捷栏里每样东西是干什么的</b><br>· ⛏ 地鼠锄：把<b>草地</b>开垦成<b>耕地</b>（种东西的第一步，耗体力 2）<br>· 🌱 树果种：种在<b>耕地</b>上，当季才能种（耗体力 1）；几天后成熟<br>· 💧 车厘龟壶：给<b>耕地浇水</b>——只有浇过水（或下雨）的作物才会生长（耗体力 2）<br>· 🗡 螳螂镰：砍<b>树</b>得木材（耗体力 4）· 👊 拳石镐：敲<b>石头</b>得石头，山洞里还能挖矿（耗体力 4）<br>· 🎣 钓竿：走到<b>池塘</b>边，面向水面按空格甩竿，看到「咬钩」马上再按空格收竿<br>· 🫐 树果/鱼：选中后按空格吃掉回复体力，或拿到杂货摊卖钱<br>· 🪵木材 / 🪨石头：在杂货摊升级工具（升级后更省体力）<br><br><b>🌾 一天的循环</b><br>开垦 → 播种 → 浇水 → (做事/钓鱼/交朋友) → 回屋睡觉 → 作物生长 → 收获 → 卖给喵喵换 ₽ → 买新种子/升级<br>· 雨天不用浇水；换季会枯萎不合季节的作物；冬季只有雪绒果能种<br><br><b>🔄 百变怪的变身</b><br>选中不同物品，百变怪自动变成对应形态：锄→地鼠 · 壶→车厘龟 · 镰→飞天螳螂 · 镐→小拳石 · 种子→妙蛙种子 · 钓竿→可达鸭<br><br><b>✨ 技能研习（杂货摊 · 随成长解锁）</b><br>⚡ 电光一闪：按住 Shift 冲刺 · 💧 求雨圈：浇水变 3×3<br>🌪 旋风刀 / 🪨 岩崩：砍伐/开采产出翻倍且省体力<br>🎣 悠闲垂钓：鱼更快咬钩、更难逃脱 · 💤 卡比兽之力：体力上限 +25<br>🌱 日光束：按 F 浇灌并催熟周围 5×5 作物 · 🎒 背包扩容：最多 18 格<br><br><b>🌿 野生宝可梦</b><br>· 每天有野生 波波/小磁怪/走路草 出没，按 E 互动：聊天 +5、喂食树果/鱼 +15（每天各一次）<br>· 好感 100 结为挚友：按 T 变身成它并获得被动<br>&nbsp;&nbsp;波波「顺风」移速+25% · 小磁怪「磁力」伐木采石+1 · 走路草「晨露」浇水省体力');
     }
     else if (act==='stats'){
       const s = game ? game.stats : {earned:0,harvested:0,chopped:0,mined:0,daysPlayed:0,watered:0,fished:0};
@@ -1772,6 +1814,68 @@ $('menu').querySelectorAll('button').forEach(b=>{
     }
   });
 });
+
+/* ---------------- 农场地图（M 键 / 菜单打开，打开时时间暂停） ---------------- */
+function showFarmMap(){
+  if (!game) return;
+  const where = inCave ? '（你正在山洞里，⭐ 标在洞口）' : (inHouse ? '（你正在小屋里，⭐ 标在小屋）' : '');
+  showDialog(
+    '<h3>🗺 农场地图</h3>'+
+    '<div id="map-wrap" style="text-align:center"></div>'+
+    '<div style="font-size:13px;margin-top:8px;line-height:2">⭐ 你在这里 · 🏠 小屋（床 · 睡觉）· 🛒 喵喵杂货摊（买卖/研习）· 🕳 山洞（挖矿）· 💧 池塘（钓鱼）'+where+'</div>'+
+    '<div style="font-size:12.5px;color:#6a4a20;line-height:1.9">🟫 耕地 · 🌱 作物（越亮越接近成熟）· 🌳 树（镰砍）· 🪨 石（镐敲）'+(inHouse?'':'<br>小屋在农场<b>西侧</b>，杂货摊在<b>中南部</b>，山洞在<b>东北角</b>，池塘在<b>东南角</b>')+'</div>',
+    [{label:'关闭', ghost:true, fn:closeDialog}]
+  );
+  const wrap = $('map-wrap');
+  if (!wrap) return;
+  const cnv = document.createElement('canvas');
+  cnv.width = MAP_W*10; cnv.height = MAP_H*10;
+  cnv.style.cssText = 'width:min(100%,540px);border:3px solid #6a522b;border-radius:10px;background:#7daf64';
+  wrap.appendChild(cnv);
+  drawFarmMap(cnv.getContext('2d'), cnv.width/MAP_W);
+}
+function drawFarmMap(g, s){
+  const grass = SEASON_COLORS[game.season] || '#7daf64';
+  const grass2 = SEASON_GRASS2[game.season] || '#79a85d';
+  for (let y=0;y<MAP_H;y++) for (let x=0;x<MAP_W;x++){
+    const i = idx(x,y), t = game.tile[i], d = game.deco[i];
+    let c = (t===T_GRASS && (x+y)%2===0) ? grass2 : grass;
+    if (t===T_TILLED) c = game.watered[i] ? '#6e5230' : '#9a7748';
+    else if (t===T_PATH) c = '#cdb27c';
+    else if (t===T_WATER) c = '#4f96d8';
+    g.fillStyle = c;
+    g.fillRect(x*s, y*s, s, s);
+    if (d===D_TREE){ g.fillStyle = '#3e6b34'; g.fillRect(x*s+1, y*s+1, s-2, s-2); }
+    else if (d===D_ROCK){ g.fillStyle = '#9a9aa2'; g.fillRect(x*s+2, y*s+2, s-4, s-4); }
+    const cr = game.crops[i];
+    if (cr){
+      const def = CROPS[cr.type];
+      g.fillStyle = cr.rem<=0 ? '#ffe9b0' : def.color;
+      g.fillRect(x*s+3, y*s+3, s-6, s-6);
+    }
+  }
+  const label = (x, y, emoji, w, h)=>{
+    g.fillStyle = 'rgba(30,22,10,.55)';
+    g.fillRect(x*s, y*s, w*s, h*s);
+    g.font = Math.round(s*1.6)+'px sans-serif';
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(emoji, (x+w/2)*s, (y+h/2)*s+1);
+  };
+  label(HOUSE.x, HOUSE.y, '🏠', HOUSE.w, HOUSE.h);
+  label(SHOP.x, SHOP.y, '🛒', SHOP.w, SHOP.h);
+  label(CAVE.x-1, CAVE.y-2, '🕳', 3, 2);
+  // 玩家位置：屋内/洞内时标在对应建筑上
+  let px = player.x, py = player.y;
+  if (inCave){ px = CAVE.x+1; py = CAVE.y+1; }
+  else if (inHouse){ px = HOUSE.x+HOUSE.w/2; py = HOUSE.y+HOUSE.h/2; }
+  g.beginPath();
+  g.arc(px*s, py*s, s*0.75, 0, Math.PI*2);
+  g.fillStyle = '#ffd75e'; g.strokeStyle = '#4a2e08'; g.lineWidth = 2;
+  g.fill(); g.stroke();
+  g.font = 'bold '+Math.round(s*1.2)+'px sans-serif';
+  g.fillStyle = '#4a2e08'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText('★', px*s, py*s+1);
+}
 
 /* ---------------- 音效 ---------------- */
 /* ---- 产品级音频：分层合成音效 + 环境音（鸟鸣/蟋蟀/雨声），纯 WebAudio 无素材 ---- */
@@ -3351,9 +3455,24 @@ function playerWorld(){
 
 /* ---------------- 更新（模拟） ---------------- */
 let timeHudShown = '';
+const TIME_RATE = 10/7; // 星露谷流速：10 游戏分钟 = 7 现实秒（6:00→凌晨2:00 约 14 分钟）
+let sleepWarned = false;
+function uiBlocked(){ // 打开菜单 / 对话框 / 地图，或手机竖屏引导遮罩挡住画面时，世界暂停
+  return !!(dialog || menuOpen
+    || (typeof window!=='undefined' && window.__rotateBlocked && window.__rotateBlocked()));
+}
 function update(dt){
   if (!game || forceSleeping) return;
-  game.time += 15*dt;
+  if (uiBlocked()){
+    if (!$('hud-time').textContent.endsWith('⏸')) updateHud(); // 挂上 ⏸ 标记
+    return;
+  }
+  game.time += TIME_RATE*dt;
+  if (game.time >= 25*60 && !sleepWarned){
+    sleepWarned = true;
+    toast('😴 凌晨 1 点了！快回小屋上床睡觉（2:00 会晕倒）');
+    sfx('sleep');
+  }
   if (game.time >= 26*60){
     game.time = 26*60;
     sfx('sleep');
@@ -3495,14 +3614,50 @@ function initTouch(){
   if (!isTouch && !force) return;
   document.body.classList.add('has-pad');
   ui.classList.remove('hidden');
-  // 任务栏（引导）、状态栏（体力/形态）、工具栏（快捷栏）移出画面，进顶部甲板黑色区域
-  const topdeck = $('topdeck');
-  if (topdeck){
-    for (const id of ['guide','energybar','formbar','hotbar']){
-      const el = document.getElementById(id);
-      if (el) topdeck.appendChild(el);
-    }
+  // 手机横屏全屏：布局上 #wrap 已铺满全屏；借首次触摸的用户手势请求浏览器全屏，
+  // 成功后尝试锁定横屏（Android 支持；iOS 不支持则靠下面的竖屏提示遮罩引导）。
+  // 只在粗指针设备（手机/平板）上请求，避免触屏笔记本用户被误全屏。
+  const coarse = (typeof matchMedia==='function') && matchMedia('(pointer:coarse)').matches;
+  let fsAsked = false;
+  const tryFullscreen = ()=>{
+    if (fsAsked || !coarse) return;
+    fsAsked = true;
+    const el = document.documentElement;
+    const fn = el.requestFullscreen || el.webkitRequestFullscreen;
+    if (!fn) return;
+    try{
+      const p = fn.call(el);
+      const lockLandscape = ()=>{
+        if (screen.orientation && screen.orientation.lock){
+          try{ const q = screen.orientation.lock('landscape'); if (q && q.catch) q.catch(()=>{}); }catch(e){}
+        }
+      };
+      if (p && p.then) p.then(lockLandscape, ()=>{});
+      else setTimeout(lockLandscape, 300); // 旧 webkit 不返回 promise
+    }catch(e){}
+  };
+  window.addEventListener('touchstart', tryFullscreen, {once:true, passive:true});
+  window.addEventListener('pointerdown', tryFullscreen, {once:true, passive:true});
+  // 竖屏提示遮罩：横屏是目标体验；用户可选择继续竖屏（本次会话内不再打扰）
+  let portraitBlocked = false;
+  const rotateEl = $('rotate-hint');
+  const refreshRotate = ()=>{
+    portraitBlocked = coarse
+      && matchMedia('(orientation:portrait)').matches
+      && !document.body.classList.contains('rotate-ok');
+    if (rotateEl) rotateEl.classList.toggle('on', portraitBlocked);
+  };
+  if (rotateEl){
+    const skip = $('rotate-skip');
+    if (skip) skip.addEventListener('click', ()=>{
+      document.body.classList.add('rotate-ok');
+      refreshRotate();
+    });
+    window.addEventListener('resize', refreshRotate);
+    window.addEventListener('orientationchange', ()=>setTimeout(refreshRotate, 120));
+    refreshRotate();
   }
+  window.__rotateBlocked = ()=>portraitBlocked;
   // A 使用 / B 互动 / X 上一件 / Y 下一件 / T 变身（挚友形态）
   const acts = {
     a: ()=>{ if (!menuOpen && !dialog && !forceSleeping) useSelected(); },
@@ -3555,7 +3710,7 @@ function initTouch(){
   // 绑定成功标记：横幅提示一次 + 甲板版本角标（用户可确认新代码已生效）
   if (isTouch) setTimeout(()=>toast('🎮 触屏按键已启用'), 600);
   const ver = document.createElement('span');
-  ver.textContent = '键v6';
+  ver.textContent = '悬浮v7';
   ver.style.cssText = 'position:absolute;right:8px;top:4px;font-size:10px;color:rgba(255,233,176,.4)';
   ui.appendChild(ver);
 }
